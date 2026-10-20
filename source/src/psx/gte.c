@@ -34,6 +34,51 @@ void gte_set_widescreen(int on)
 {
     s_widescreen = on;
 }
+
+/* the positions projected lately: an open hash table of values with the
+ * frame they were projected in */
+#define SEEN_SLOTS              16384   /* (a power of 2) */
+#define SEEN_PROBES             8
+#define SEEN_FRAMES             2
+static uint32_t s_seen_value[SEEN_SLOTS], s_seen_frame[SEEN_SLOTS];
+static uint32_t s_frame = SEEN_FRAMES + 1;
+
+void gte_new_frame(void)
+{
+    s_frame++;
+}
+
+static uint32_t seen_slot(uint32_t sxy)
+{
+    return (sxy * 2654435761u) >> 18;   /* (14 bits: SEEN_SLOTS) */
+}
+
+static void remember_projected(uint32_t sxy)
+{
+    uint32_t slot = seen_slot(sxy);
+    for (int i = 0; i < SEEN_PROBES; i++) {
+        uint32_t k = (slot + (uint32_t) i) & (SEEN_SLOTS - 1);
+        if (s_seen_value[k] == sxy || s_seen_frame[k] + SEEN_FRAMES < s_frame) {
+            s_seen_value[k] = sxy;
+            s_seen_frame[k] = s_frame;
+            return;
+        }
+    }
+    s_seen_value[slot] = sxy;           /* (full: the first slot is reused) */
+    s_seen_frame[slot] = s_frame;
+}
+
+int gte_projected_lately(uint32_t sxy)
+{
+    uint32_t slot = seen_slot(sxy);
+    for (int i = 0; i < SEEN_PROBES; i++) {
+        uint32_t k = (slot + (uint32_t) i) & (SEEN_SLOTS - 1);
+        if (s_seen_value[k] == sxy && s_seen_frame[k] + SEEN_FRAMES >= s_frame) {
+            return 1;
+        }
+    }
+    return 0;
+}
 #define FLAG_SY2                (1u << 13)
 #define FLAG_IR0                (1u << 12)
 
@@ -504,6 +549,9 @@ static void rtp(int n, int sf, int lm, int last)
     mac0(y);
     g.sxy[2][0] = saturate_flag(x >> 16, -0x400, 0x3FF, FLAG_SX2);
     g.sxy[2][1] = saturate_flag(y >> 16, -0x400, 0x3FF, FLAG_SY2);
+    if (g_pgxp_track) {
+        remember_projected((uint16_t) g.sxy[2][0] | (uint32_t) (uint16_t) g.sxy[2][1] << 16);
+    }
     {
         /* the same projection without rounding; trusted only where it
          * agrees with the hardware result (no saturation, no overflow) */

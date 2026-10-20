@@ -19,6 +19,7 @@
 #include "psx/gpu.h"
 #include "psx/gpu_hires.h"
 #include "psx/pgxp.h"
+#include "psx/gte.h"
 #include "psx/balls.h"
 #include "psx/log.h"
 
@@ -484,17 +485,20 @@ static int spans_width(int min_x, int max_x)
     return min_x <= s.clip_x1 && max_x >= s.clip_x2;
 }
 
-/* any of the polygon's corners stored by the GTE? */
+/* 3D: a corner stored by the GTE, or all corners positions the GTE
+ * projected lately (the game may copy them into its packets itself) */
 static int from_gte(const int *position_word, int count)
 {
     PgxpVertex pv;
+    int projected = 0;
     for (int k = 0; k < count; k++) {
         int w = position_word[k];
         if (s_cmd_src[w] && pgxp_lookup(s_cmd_src[w], s_cmd[w], &pv)) {
             return 1;
         }
+        projected += gte_projected_lately(s_cmd[w]);
     }
-    return 0;
+    return projected == count;
 }
 
 /* Squeezes a 2D polygon's corners (not one from the GTE or as wide as the area). */

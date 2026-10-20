@@ -73,6 +73,15 @@ enum GteControl {
  * its proportions and more of it is seen at the sides.  0 = off. */
 void gte_set_widescreen(int on);
 
+/* The screen positions the GTE projected lately are remembered (while
+ * g_pgxp_track is on): TRUE if `sxy` (an SXY word: x low, y high) is one
+ * of them.  The widescreen mode tells 3D polygons from 2D by it, also when
+ * the game copied the positions into its packets itself. */
+int gte_projected_lately(uint32_t sxy);
+
+/* A new frame (the vertical blank): positions older than two are forgotten. */
+void gte_new_frame(void);
+
 /* Power-on state (all zero). */
 void gte_reset(void);
 

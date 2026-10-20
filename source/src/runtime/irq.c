@@ -24,6 +24,7 @@
 #include "runtime/memory.h"
 #include "platform/threads.h"
 #include "psx/spu.h"
+#include "psx/gte.h"
 #include "psx/log.h"
 
 #define FRAME_US                16683           /* NTSC: 59.94 Hz */
@@ -453,6 +454,7 @@ void irq_vblank(void)
     game_lock();
     s_last_vblank_us = irq_time_us();
     s_vblank_count++;
+    gte_new_frame();
     pad_update();
     cd_tick();
     sound_vblank();
