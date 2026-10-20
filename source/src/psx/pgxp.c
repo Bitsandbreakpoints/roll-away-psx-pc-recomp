@@ -14,6 +14,7 @@ typedef struct {
 } PgxpSlot;
 
 int g_pgxp_enabled;
+int g_pgxp_track;
 static PgxpSlot s_slots[PGXP_SLOTS];
 
 static PgxpSlot *slot(const void *address)

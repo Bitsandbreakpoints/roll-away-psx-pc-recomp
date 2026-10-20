@@ -201,7 +201,7 @@ static void graphics_tab(void)
     row("Aspect ratio");
     ImGui::Combo("##aspect", &s->aspect, aspects, 3);
     if (s->aspect == ASPECT_WIDESCREEN) {
-        note("3D seen wider, menus and HUD stretched; the movies stay 4:3");
+        note("3D seen wider, menus and HUD as in 4:3; the movies stay 4:3");
     }
     row("Picture filter");
     ImGui::Combo("##filter", &s->video_filter, filters, 4);

@@ -314,7 +314,7 @@ void gte_swc2(int reg, void *address)
 {
     uint32_t value = gte_mfc2(reg);
     memcpy(address, &value, 4);
-    if (g_pgxp_enabled && reg >= GTE_SXY0 && reg <= GTE_SXYP) {
+    if ((g_pgxp_enabled || g_pgxp_track) && reg >= GTE_SXY0 && reg <= GTE_SXYP) {
         int n = reg == GTE_SXYP ? 2 : reg - GTE_SXY0;
         if (s_precise_valid[n]) {
             pgxp_store(address, value, &s_precise[n]);

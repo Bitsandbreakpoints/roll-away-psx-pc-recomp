@@ -23,6 +23,10 @@ typedef struct {
 
 extern int g_pgxp_enabled;
 
+/* The GTE's stores are kept track of also without precise vertices (the
+ * widescreen mode tells 3D from 2D by them). */
+extern int g_pgxp_track;
+
 void pgxp_store(const void *address, uint32_t value, const PgxpVertex *v);
 
 /* TRUE and *v if `address` was last stored from the GTE with `value`. */

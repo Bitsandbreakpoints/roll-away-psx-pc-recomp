@@ -167,6 +167,8 @@ void gpu_set_texture_window(uint32_t e2)
     s.win_off_y = (e2 >> 15) & 0x1F;
 }
 
+static void wide_display(int x, int y);
+
 void gpu_set_display(int x, int y, int w, int h, int rgb24)
 {
     s.disp_x = x & 0x3FF;
@@ -174,6 +176,7 @@ void gpu_set_display(int x, int y, int w, int h, int rgb24)
     s.disp_w = w;
     s.disp_h = h;
     s.disp_rgb24 = rgb24;
+    wide_display(s.disp_x, s.disp_y);
 }
 
 void gpu_set_display_enabled(int enabled)
@@ -384,6 +387,140 @@ static void set_clut(Prim *p, uint32_t clut)
     p->clut_y = (clut >> 6) & 0x1FF;
 }
 
+/* ---- widescreen: the 2D squeezed --------------------------------------- */
+
+/*
+ * In the widescreen mode the GTE squeezes the 3D horizontally by 3/4 and
+ * the picture is shown at 16:9 (gte_set_widescreen()).  The 2D - menus,
+ * the HUD - never passes the GTE, so it is squeezed here, towards the
+ * middle of the drawing area, and looks as on a 4:3 screen again.  A
+ * polygon is 3D if a corner was stored by the GTE (pgxp.h keeps track),
+ * everything else is 2D.  Only drawing into a screen-sized area is
+ * squeezed (not the game's drawing into textures), and not what spans the
+ * whole width (backgrounds, fades: they still cover the screen).
+ */
+#define WIDE_NUM                3
+#define WIDE_DEN                4
+static int s_widescreen;
+
+void gpu_set_widescreen(int on)
+{
+    s_widescreen = on;
+    g_pgxp_track = on;
+}
+
+/*
+ * A picture of only 2D (e.g. the memory card screen) is squeezed into the
+ * middle, and what the game leaves at the sides is old: such a picture is
+ * shown with black bars.  For each picture buffer (drawing area) it is
+ * noted whether something as wide as the screen - 3D or a full-width
+ * shape - was drawn into it since it was last shown.
+ */
+#define WIDE_BUFFERS            4
+static struct {
+    int x, y;
+    int wide;
+} s_wide_buffers[WIDE_BUFFERS];
+static int s_wide_buffer_count;
+static int s_display_wide = 1;
+
+static void mark_wide(void)
+{
+    for (int i = 0; i < s_wide_buffer_count; i++) {
+        if (s_wide_buffers[i].x == s.clip_x1 && s_wide_buffers[i].y == s.clip_y1) {
+            s_wide_buffers[i].wide = 1;
+            return;
+        }
+    }
+    int i = s_wide_buffer_count < WIDE_BUFFERS ? s_wide_buffer_count++ : WIDE_BUFFERS - 1;
+    s_wide_buffers[i].x = s.clip_x1;
+    s_wide_buffers[i].y = s.clip_y1;
+    s_wide_buffers[i].wide = 1;
+}
+
+/* The display shows buffer (x, y): its note is taken, the others start anew. */
+static void wide_display(int x, int y)
+{
+    int found = 0;
+    for (int i = 0; i < s_wide_buffer_count; i++) {
+        if (s_wide_buffers[i].x == x && s_wide_buffers[i].y == y) {
+            s_display_wide = s_wide_buffers[i].wide;
+            found = 1;
+        } else {
+            s_wide_buffers[i].wide = 0;
+        }
+    }
+    if (!found) {
+        s_display_wide = 1;             /* (nothing drawn there: as it is) */
+    }
+}
+
+int gpu_display_wide(void)
+{
+    return !s_widescreen || s_display_wide;
+}
+
+/* TRUE if 2D drawn now is to be squeezed */
+static int squeeze_active(void)
+{
+    if (!s_widescreen) {
+        return 0;
+    }
+    int w = s.clip_x2 - s.clip_x1 + 1, h = s.clip_y2 - s.clip_y1 + 1;
+    return w == s.disp_w && h >= s.disp_h - 16 && h <= s.disp_h + 16;
+}
+
+static int squeeze_x(int x)
+{
+    int centre = (s.clip_x1 + s.clip_x2 + 1) / 2;
+    int d = x - centre;
+    return centre + (d >= 0 ? (d * WIDE_NUM + WIDE_DEN / 2) / WIDE_DEN
+                            : -((-d * WIDE_NUM + WIDE_DEN / 2) / WIDE_DEN));
+}
+
+/* a shape from min_x to max_x: as wide as the area (left alone)? */
+static int spans_width(int min_x, int max_x)
+{
+    return min_x <= s.clip_x1 && max_x >= s.clip_x2;
+}
+
+/* any of the polygon's corners stored by the GTE? */
+static int from_gte(const int *position_word, int count)
+{
+    PgxpVertex pv;
+    for (int k = 0; k < count; k++) {
+        int w = position_word[k];
+        if (s_cmd_src[w] && pgxp_lookup(s_cmd_src[w], s_cmd[w], &pv)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Squeezes a 2D polygon's corners (not one from the GTE or as wide as the area). */
+static void squeeze_polygon(Vertex *v, int count, const int *position_word)
+{
+    if (!squeeze_active()) {
+        return;
+    }
+    if (from_gte(position_word, count)) {
+        mark_wide();
+        return;
+    }
+    int min_x = v[0].x, max_x = v[0].x;
+    for (int k = 1; k < count; k++) {
+        min_x = v[k].x < min_x ? v[k].x : min_x;
+        max_x = v[k].x > max_x ? v[k].x : max_x;
+    }
+    if (spans_width(min_x, max_x)) {
+        mark_wide();
+        return;
+    }
+    for (int k = 0; k < count; k++) {
+        v[k].x = squeeze_x(v[k].x);
+    }
+}
+
 /* the current texture page for rectangles and untextured primitives */
 static void prim_from_state(Prim *p)
 {
@@ -464,6 +601,7 @@ static void command_polygon(const uint32_t *c)
     }
     prim_from_state(&p);
     p.dither = s.dither && (gouraud || (p.textured && !p.raw));
+    squeeze_polygon(v, count, position_word);
     draw_triangle(&p, &v[0], &v[1], &v[2]);
     if (quad) {
         draw_triangle(&p, &v[1], &v[2], &v[3]);
@@ -537,19 +675,71 @@ static void command_line(const uint32_t *c, int count)
     prim_from_state(&p);
     p.dither = s.dither && p.gouraud;
     set_color(&a, c[0]);
+    int first_word = i;
     set_position(&a, c[i++]);
+    int squeeze = squeeze_active() && !from_gte(&first_word, 1);
+    if (squeeze_active() && !squeeze) {
+        mark_wide();
+    }
+    if (squeeze) {
+        a.x = squeeze_x(a.x);
+    }
     while (i < count) {
         set_color(&b, p.gouraud ? c[i++] : c[0]);
         if (i >= count) {
             break;
         }
         set_position(&b, c[i++]);
+        if (squeeze) {
+            b.x = squeeze_x(b.x);
+        }
         draw_line(&p, &a, &b);
         a = b;
     }
 }
 
 /* ---- rectangles ------------------------------------------------------- */
+
+/* A 2D rectangle in the widescreen mode: narrower by 3/4, so its texels
+ * are drawn as a textured quad (two triangles) instead of one to one. */
+static void squeezed_rectangle(const Prim *rect, const Vertex *at, int w, int h, int u0, int v0)
+{
+    Prim p = *rect;
+    Vertex q[4];
+    int x0 = squeeze_x(at->x), x1 = squeeze_x(at->x + w);
+    int u1 = s.flip_x ? u0 - w : u0 + w, v1 = s.flip_y ? v0 - h : v0 + h;
+    for (int k = 0; k < 4; k++) {
+        q[k] = *at;
+        q[k].x = k & 1 ? x1 : x0;
+        q[k].y = at->y + (k & 2 ? h : 0);
+        q[k].u = k & 1 ? u1 : u0;
+        q[k].v = k & 2 ? v1 : v0;
+    }
+    if (x1 <= x0) {
+        return;
+    }
+    p.gouraud = 0;
+    p.dither = 0;
+    draw_triangle(&p, &q[0], &q[1], &q[2]);
+    draw_triangle(&p, &q[1], &q[2], &q[3]);
+    if (hires_scale()) {
+        HiresVertex hv[4];
+        GpuEnv e;
+        current_env(&e);
+        for (int k = 0; k < 4; k++) {
+            hv[k].x = (float) q[k].x;
+            hv[k].y = (float) q[k].y;
+            hv[k].z = 0;
+            hv[k].r = q[k].r;
+            hv[k].g = q[k].g;
+            hv[k].b = q[k].b;
+            hv[k].u = q[k].u;
+            hv[k].v = q[k].v;
+        }
+        hires_triangle(&p, &e, &hv[0], &hv[1], &hv[2]);
+        hires_triangle(&p, &e, &hv[1], &hv[2], &hv[3]);
+    }
+}
 
 static void command_rectangle(const uint32_t *c)
 {
@@ -577,6 +767,13 @@ static void command_rectangle(const uint32_t *c)
     } else {
         w = c[i] & 0x3FF;
         h = (c[i] >> 16) & 0x1FF;
+    }
+    if (squeeze_active() && w > 0 && h > 0) {
+        if (!spans_width(v.x, v.x + w - 1)) {
+            squeezed_rectangle(&p, &v, w, h, u0, v0);
+            return;
+        }
+        mark_wide();
     }
     if (hires_scale()) {
         GpuEnv e;

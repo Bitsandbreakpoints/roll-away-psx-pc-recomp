@@ -270,6 +270,13 @@ static void draw_picture(int w, int h)
     }
     ui_draw_video(ImGui::GetBackgroundDrawList(), ImVec2(x0, y0), ImVec2(x1, y1),
                   g_settings_pc.video_filter, gpu_display_width(), gpu_display_lines());
+    if (!gpu_display_wide()) {
+        /* (widescreen, a picture of only 2D: squeezed into the middle 3/4) */
+        float bar = (x1 - x0) / 8;
+        ImDrawList *draw = ImGui::GetBackgroundDrawList();
+        draw->AddRectFilled(ImVec2(x0, y0), ImVec2(x0 + bar, y1), IM_COL32(0, 0, 0, 255));
+        draw->AddRectFilled(ImVec2(x1 - bar, y0), ImVec2(x1, y1), IM_COL32(0, 0, 0, 255));
+    }
 }
 
 /* The settings that take effect at once while the game runs. */
@@ -279,8 +286,10 @@ static void apply_game_settings(void)
     if (GetEnvironmentVariableA("RA_NATIVE", NULL, 0)) {
         gpu_set_enhancements(1, 0, 0);
         gte_set_widescreen(0);
+        gpu_set_widescreen(0);
     } else {
         gte_set_widescreen(g_settings_pc.aspect == ASPECT_WIDESCREEN);
+        gpu_set_widescreen(g_settings_pc.aspect == ASPECT_WIDESCREEN);
         gpu_set_enhancements(g_settings_pc.internal_scale, g_settings_pc.precise_vertices,
                              g_settings_pc.texture_filtering);
     }

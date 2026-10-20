@@ -86,8 +86,8 @@ pause menu).
 - **Picture filters**: sharp pixels, bilinear, CRT, or a soft-TV filter
   (GTU-like).
 - **Widescreen (16:9)**, optional: the 3D world is seen wider and keeps its
-  proportions (the menus and the flat HUD pictures are stretched; the
-  movies stay 4:3).
+  proportions, the menus and the HUD keep theirs too (screens of only 2D,
+  and the movies, are shown 4:3).
 - **Window or borderless full screen**, any window size, 4:3, 16:9 or
   stretched, vsync.
 
