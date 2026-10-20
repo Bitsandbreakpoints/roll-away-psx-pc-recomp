@@ -307,10 +307,10 @@ void psx_devices_stop(void)
     threads_lock(s_lock);
     s_sound_running = 0;
     s_queue_read = s_queue_count = 0;
-    extern int g_spu_unheard;
-    psx_log("sound: %d device frames not filled, %d voices stopped unheard", s_queue_short,
-            g_spu_unheard);
-    g_spu_unheard = 0;
+    extern int g_spu_unheard, g_xa_underruns;
+    psx_log("sound: %d device frames not filled, %d voices stopped unheard, XA ran dry %d times",
+            s_queue_short, g_spu_unheard, g_xa_underruns);
+    g_spu_unheard = g_xa_underruns = 0;
     s_queue_short = 0;
     threads_unlock(s_lock);
 }

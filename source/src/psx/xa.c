@@ -89,6 +89,15 @@ static int s_read, s_count;
 static int s_rate = RATE_HALF;
 static uint32_t s_phase;                /* 16.16 position between two queued frames */
 
+/* The sectors come in blocks (a sector holds 53 or 107 ms of sound, a
+ * track's sectors are 4 or 8 apart), exactly as fast as they are played:
+ * the sound starts only when an eighth of a second is queued, and after
+ * the queue ran dry it waits for that again, so it never runs dry
+ * between two blocks (which crackled). */
+#define PREBUFFER_DIVISOR       8       /* rate / 8: 125 ms */
+static int s_playing;
+int g_xa_underruns;                     /* (the log) */
+
 /* the decoder's history per channel */
 static int s_old[2], s_older[2];
 
@@ -98,6 +107,7 @@ void xa_reset(void)
     s_read = 0;
     s_count = LANCZOS_A - 1;                /* silent history */
     s_phase = 0;
+    s_playing = 0;
     s_old[0] = s_old[1] = s_older[0] = s_older[1] = 0;
 }
 
@@ -179,7 +189,18 @@ void xa_mix(int16_t *out, int frames, int volume_left, int volume_right)
         build_kernel();
     }
     uint32_t step = (uint32_t) (((uint64_t) s_rate << 16) / OUTPUT_RATE);
-    for (int i = 0; i < frames && s_count >= LANCZOS_TAPS; i++) {
+    if (!s_playing) {
+        if (s_count < LANCZOS_TAPS + s_rate / PREBUFFER_DIVISOR) {
+            return;
+        }
+        s_playing = 1;
+    }
+    for (int i = 0; i < frames; i++) {
+        if (s_count < LANCZOS_TAPS) {
+            s_playing = 0;              /* ran dry: wait for the cushion again */
+            g_xa_underruns++;
+            return;
+        }
         const int16_t *kernel = s_kernel[(s_phase & 0xFFFF) * LANCZOS_PHASES >> 16];
         for (int c = 0; c < 2; c++) {
             int32_t sum = 0;
