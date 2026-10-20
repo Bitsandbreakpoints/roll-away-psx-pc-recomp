@@ -26,7 +26,8 @@ enum InputDevice {
 /* Settings.aspect */
 enum AspectMode {
     ASPECT_4_3 = 0,
-    ASPECT_STRETCH = 1
+    ASPECT_STRETCH = 1,
+    ASPECT_WIDESCREEN = 2           /* 16:9, the 3D squeezed by the GTE (gte_set_widescreen) */
 };
 
 typedef struct {

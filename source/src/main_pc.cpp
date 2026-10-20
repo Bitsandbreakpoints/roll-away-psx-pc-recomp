@@ -23,12 +23,14 @@
 #include "runtime/system.h"
 #include "runtime/kanji.h"
 #include "platform/font.h"
+#include "psx/gte.h"
 #include "psx/gpu.h"
 #include "psx/log.h"
 
 #define BACKGROUND              0x0A1020
 #define GAME_BACKGROUND         0x000000
 #define PSX_ASPECT              (4.0f / 3.0f)   /* the TV picture */
+#define WIDE_ASPECT             (16.0f / 9.0f)  /* the widescreen mode */
 #define HINT_FRAMES             (60 * 4)        /* "Esc" hint at the start */
 #define PAD_SELECT_START        0x0009          /* PS1 buttons that open the settings */
 #define SETTINGS_WIDTH          760.0f          /* in-game settings, before DPI scaling */
@@ -242,7 +244,8 @@ static void debug_dump_vram(void)
     }
 }
 
-/* The PS1 picture in the window: 4:3 with black bars, or stretched. */
+/* The PS1 picture in the window: 4:3 (or 16:9 in widescreen mode; the
+ * movies stay 4:3) with black bars, or stretched. */
 static void draw_picture(int w, int h)
 {
     int pw, ph;
@@ -252,13 +255,15 @@ static void draw_picture(int w, int h)
     }
     ui_video_update(picture, pw, ph);
     float x0 = 0, y0 = 0, x1 = (float) w, y1 = (float) h;
-    if (g_settings_pc.aspect == ASPECT_4_3) {
-        if (w > h * PSX_ASPECT) {
-            float width = h * PSX_ASPECT;
+    if (g_settings_pc.aspect != ASPECT_STRETCH) {
+        float aspect = g_settings_pc.aspect == ASPECT_WIDESCREEN && !gpu_display_is_24bit()
+                       && !GetEnvironmentVariableA("RA_NATIVE", NULL, 0) ? WIDE_ASPECT : PSX_ASPECT;
+        if (w > h * aspect) {
+            float width = h * aspect;
             x0 = (w - width) / 2;
             x1 = x0 + width;
         } else {
-            float height = w / PSX_ASPECT;
+            float height = w / aspect;
             y0 = (h - height) / 2;
             y1 = y0 + height;
         }
@@ -273,7 +278,9 @@ static void apply_game_settings(void)
     /* (tests: RA_NATIVE=1 draws like the console, for comparisons) */
     if (GetEnvironmentVariableA("RA_NATIVE", NULL, 0)) {
         gpu_set_enhancements(1, 0, 0);
+        gte_set_widescreen(0);
     } else {
+        gte_set_widescreen(g_settings_pc.aspect == ASPECT_WIDESCREEN);
         gpu_set_enhancements(g_settings_pc.internal_scale, g_settings_pc.precise_vertices,
                              g_settings_pc.texture_filtering);
     }

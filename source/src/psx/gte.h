@@ -68,6 +68,11 @@ enum GteControl {
 #define GTE_FLAG_ERROR          0x7F87E000u
 #define GTE_FLAG_ERROR_BIT      0x80000000u
 
+/* Widescreen: the perspective transform squeezes X towards the centre
+ * (OFX) by 3/4, and the picture is shown at 16:9, so the 3D world keeps
+ * its proportions and more of it is seen at the sides.  0 = off. */
+void gte_set_widescreen(int on);
+
 /* Power-on state (all zero). */
 void gte_reset(void);
 

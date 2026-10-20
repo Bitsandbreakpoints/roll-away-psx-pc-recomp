@@ -44,10 +44,12 @@ All releases are on the [Releases page](https://github.com/Bitsandbreakpoints/ro
 
 ![A stage](images/level.png)
 
+![Widescreen (16:9)](images/widescreen.png)
+
 ![The pause menu](images/pause-menu.png)
 
 *In-game pictures: Roll Away running in this port (4× internal resolution,
-soft-TV filter). The game's pictures shown here are © their respective
+soft-TV filter; one in the widescreen mode). The game's pictures shown here are © their respective
 owners.*
 
 ## Disclaimer
@@ -83,8 +85,11 @@ pause menu).
 - **Precise vertices**: no PS1 "wobble", perspective-correct textures.
 - **Picture filters**: sharp pixels, bilinear, CRT, or a soft-TV filter
   (GTU-like).
-- **Window or borderless full screen**, any window size, 4:3 or stretched,
-  vsync.
+- **Widescreen (16:9)**, optional: the 3D world is seen wider and keeps its
+  proportions (the menus and the flat HUD pictures are stretched; the
+  movies stay 4:3).
+- **Window or borderless full screen**, any window size, 4:3, 16:9 or
+  stretched, vsync.
 
 **Sound**
 - **Separate volumes** for the music (the disc's XA tracks) and the sound

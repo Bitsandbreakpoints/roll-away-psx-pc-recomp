@@ -24,6 +24,16 @@
 #define FLAG_MAC0_POS           (1u << 16)
 #define FLAG_MAC0_NEG           (1u << 15)
 #define FLAG_SX2                (1u << 14)
+
+/* the widescreen squeeze of X: 4:3 -> 16:9 */
+#define WIDESCREEN_NUM          3
+#define WIDESCREEN_DEN          4
+static int s_widescreen;
+
+void gte_set_widescreen(int on)
+{
+    s_widescreen = on;
+}
 #define FLAG_SY2                (1u << 13)
 #define FLAG_IR0                (1u << 12)
 
@@ -484,7 +494,11 @@ static void rtp(int n, int sf, int lm, int last)
     }
     uint32_t q = divide(g.h, g.sz[3]);
     memcpy(g.sxy[0], g.sxy[1], sizeof(g.sxy[0]) * 2);
-    int64_t x = (int64_t) q * g.ir[1] + g.ofx;
+    int64_t x = (int64_t) q * g.ir[1];
+    if (s_widescreen) {
+        x = x * WIDESCREEN_NUM / WIDESCREEN_DEN;
+    }
+    x += g.ofx;
     int64_t y = (int64_t) q * g.ir[2] + g.ofy;
     mac0(x);
     mac0(y);
@@ -497,7 +511,8 @@ static void rtp(int n, int sf, int lm, int last)
         double vz = (double) r[2] / 4096.0;
         int valid = 0;
         if (vz >= g.h / 2.0 && vz > 0) {
-            pv.x = (float) (g.ofx / 65536.0 + g.h * ((double) r[0] / 4096.0) / vz);
+            pv.x = (float) (g.ofx / 65536.0 + g.h * ((double) r[0] / 4096.0) / vz
+                            * (s_widescreen ? (double) WIDESCREEN_NUM / WIDESCREEN_DEN : 1.0));
             pv.y = (float) (g.ofy / 65536.0 + g.h * ((double) r[1] / 4096.0) / vz);
             pv.z = (float) vz;
             valid = pv.x - g.sxy[2][0] > -1.5f && pv.x - g.sxy[2][0] < 2.5f

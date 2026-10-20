@@ -54,6 +54,9 @@ const uint32_t *gpu_display_rgba(int *w, int *h);
 
 /* The displayed picture's size in the console's pixels (320 x 240 here). */
 int gpu_display_width(void);
+
+/* The display shows 24-bit pictures (the movies, from the MDEC). */
+int gpu_display_is_24bit(void);
 int gpu_display_lines(void);
 
 /* Internal resolution (1..HIRES_MAX_SCALE times), precise vertices from the GTE and

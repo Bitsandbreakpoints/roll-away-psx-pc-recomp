@@ -79,8 +79,8 @@ controller) pauses and shows the settings with Resume, Back to launcher and
 Quit game, and holding Tab fast-forwards.
 
 Controls (keyboard and XInput controllers, two players), graphics
-(internal resolution up to 4x, precise vertices, picture filters such as
-CRT, full screen) and sound (separate music and effects volumes) are set
+(internal resolution up to 4x, precise vertices, an optional 16:9
+widescreen mode, picture filters such as CRT, full screen) and sound (separate music and effects volumes) are set
 under SETTINGS. The settings are kept in settings.ini next to the program.
 The game saves to a memory card, kept in roll_away_card1.mcd next to the
 program (the format emulators use). No BIOS is needed.

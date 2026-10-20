@@ -161,7 +161,7 @@ static void graphics_tab(void)
 {
     Settings *s = &g_settings_pc;
     const char *modes[] = { "Window", "Fullscreen (borderless)" };
-    const char *aspects[] = { "4:3 (original)", "Stretched" };
+    const char *aspects[] = { "4:3 (original)", "Stretched", "16:9 widescreen" };
     const char *filters[] = { "Sharp pixels", "Bilinear (smooth scaling)", "CRT (tube TV)",
                               "Soft TV (GTU-like)" };
     char current[64], format[64];
@@ -199,7 +199,10 @@ static void graphics_tab(void)
     row("Internal resolution");
     ImGui::SliderInt("##scale", &s->internal_scale, 1, HIRES_MAX_SCALE, format);
     row("Aspect ratio");
-    ImGui::Combo("##aspect", &s->aspect, aspects, 2);
+    ImGui::Combo("##aspect", &s->aspect, aspects, 3);
+    if (s->aspect == ASPECT_WIDESCREEN) {
+        note("3D seen wider, menus and HUD stretched; the movies stay 4:3");
+    }
     row("Picture filter");
     ImGui::Combo("##filter", &s->video_filter, filters, 4);
 

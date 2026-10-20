@@ -781,6 +781,11 @@ static uint32_t expand_5bit(int c)
     return (uint32_t) ((c << 3) | (c >> 2));
 }
 
+int gpu_display_is_24bit(void)
+{
+    return s.disp_rgb24;
+}
+
 int gpu_display_width(void)
 {
     return s.disp_w;
