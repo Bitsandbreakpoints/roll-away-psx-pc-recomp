@@ -44,12 +44,10 @@ All releases are on the [Releases page](https://github.com/Bitsandbreakpoints/ro
 
 ![A stage](images/level.png)
 
-![Widescreen (16:9)](images/widescreen.png)
-
 ![The pause menu](images/pause-menu.png)
 
 *In-game pictures: Roll Away running in this port (4× internal resolution,
-soft-TV filter; one in the widescreen mode). The game's pictures shown here are © their respective
+soft-TV filter). The game's pictures shown here are © their respective
 owners.*
 
 ## Disclaimer
