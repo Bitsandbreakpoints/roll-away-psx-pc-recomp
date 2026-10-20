@@ -1,0 +1,7 @@
+/*
+ * resources.rc - files built into the exe.  Only our own or freely
+ * licensed files: nothing from the game disc.
+ */
+#include "resources.h"
+
+IDR_LAUNCHER_BACKGROUND RCDATA "assets/launcher/background.png"

@@ -1,0 +1,29 @@
+# build output and downloaded tools
+/build/
+/build.ninja
+/.ninja_log
+/.ninja_deps
+/tools/llvm-mingw/
+/tools/ninja/
+/tools/_downloads/
+/tools/emulator/
+
+# never commit the game, its files, the BIOS or saves
+/orig/
+/work/
+*.bin
+*.cue
+*.chd
+*.iso
+*.img
+*.exe
+*.mcd
+*.mcr
+settings.ini
+
+# debugging output (RA_VRAM_DUMP, RA_WAV_DUMP, the log)
+vram_*.bmp
+shot_*.bmp
+*.wav
+*.log
+__pycache__/
