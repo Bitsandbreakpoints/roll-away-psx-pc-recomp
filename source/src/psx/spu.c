@@ -82,6 +82,7 @@ typedef struct {
     int32_t level;                      /* envelope 0..7FFFh */
     int32_t wait;                       /* samples until the next envelope step */
     int32_t output;                     /* last sample after the envelope (pitch modulation) */
+    int unheard;                /* keyed on, not a sample played yet (the log) */
 } Voice;
 
 static Voice s_voices[SPU_VOICES];
@@ -168,11 +169,19 @@ static void decode_block(Voice *v, int index)
     (void) index;
 }
 
+int g_spu_unheard;                      /* (sounds stopped before a sample: the log) */
+extern int g_spu_trace;
+void psx_log(const char *format, ...);
+
 static void key_on(uint32_t voices)
 {
     for (int i = 0; i < SPU_VOICES; i++) {
         if (voices & (1u << i)) {
             Voice *v = &s_voices[i];
+            if (v->unheard && g_spu_unheard++ < 40 && g_spu_trace) {
+                psx_log("spu: voice %d keyed on again unheard", i);
+            }
+            v->unheard = 1;
             v->current = v->start;
             v->repeat_set = 0;
             v->hist1 = v->hist2 = 0;
@@ -190,6 +199,12 @@ static void key_on(uint32_t voices)
 static void key_off(uint32_t voices)
 {
     for (int i = 0; i < SPU_VOICES; i++) {
+        if ((voices & (1u << i)) && s_voices[i].unheard) {
+            if (g_spu_unheard++ < 40 && g_spu_trace) {
+                psx_log("spu: voice %d keyed off unheard", i);
+            }
+            s_voices[i].unheard = 0;
+        }
         if ((voices & (1u << i)) && s_voices[i].phase != PHASE_OFF) {
             s_voices[i].phase = PHASE_RELEASE;
             s_voices[i].wait = 0;
@@ -561,6 +576,7 @@ void spu_render(int16_t *out, int frames)
             int32_t s = (non >> i) & 1 ? (int16_t) s_noise_level
                                        : interpolate(v->last, v->counter & 0xFFF);
             envelope_step(v);
+            v->unheard = 0;
             s = (s * v->level) >> 15;
             v->output = s;
             for (int c = 0; c < 2; c++) {

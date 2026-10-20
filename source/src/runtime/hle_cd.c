@@ -119,6 +119,7 @@ typedef struct {
     uint8_t data[MAX_FRAME_SECTORS * STR_DATA_SIZE];
 } Frame;
 
+int g_cd_trace;                         /* (debugging: RA_CD_TRACE logs the commands) */
 static int s_position;                  /* LBA of CdlSetloc */
 static int s_mode;
 static int s_filter_file, s_filter_channel;
@@ -174,6 +175,7 @@ static void clear_frames(void)
 
 void hle_cd_reset(void)
 {
+    g_cd_trace = GetEnvironmentVariableA("RA_CD_TRACE", NULL, 0) != 0;
     s_position = 0;
     s_mode = 0;
     s_filter_file = s_filter_channel = 0;
@@ -301,6 +303,11 @@ void cd_mix_audio(int16_t *out, int frames, int volume_left, int volume_right)
 static void control(void)
 {
     uint32_t com = GPR[4] & 0xFF, param = GPR[5], result = GPR[6];
+    if (g_cd_trace) {
+        psx_log("CdControl(%02X, %02X %02X %02X %02X) ra %08X", com, param ? RD8(param) : 0,
+                param ? RD8(param + 1) : 0, param ? RD8(param + 2) : 0,
+                param ? RD8(param + 3) : 0, GPR[31]);
+    }
     switch (com) {
     case CDL_SETLOC:
         if (param) {

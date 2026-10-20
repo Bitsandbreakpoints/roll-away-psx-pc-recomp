@@ -9,9 +9,11 @@
  * callbacks for the vertical blank, the timers and finished DMA run, with
  * the registers saved around them (rt_invoke()).
  *
- * The sound: the device's thread mixes the SPU while the game's code is
- * not running (it holds s_lock and lets go only while it waits for the
- * vertical blank), see system.h.
+ * The sound: the SPU is mixed in step with the game, one frame of sound at
+ * every vertical blank, as the console plays it while the game runs (the
+ * game's sound driver checks its voices' envelopes from frame to frame
+ * and must see them move on by a frame each time).  The device's thread
+ * plays it from a small queue (s_lock guards both, see system.h).
  */
 #include <windows.h>
 #include <string.h>
@@ -83,6 +85,20 @@ static int s_master_volume = 100, s_music_volume = 100, s_effects_volume = 100;
 #define CD_VOLUME_ONE           256     /* cd_mix_audio(): as decoded */
 
 void cd_tick(void);
+
+/* the queue between the frames' sound and the device's thread: a few
+ * frames are kept; each frame gets a sample or two more or less to keep it
+ * there (the console's 59.94 Hz against the PC's 44.1 kHz clock) */
+#define QUEUE_SAMPLES           (PSX_SOUND_FRAME_SAMPLES * 16)
+#define QUEUE_TARGET            (PSX_SOUND_FRAME_SAMPLES * 3)
+#define SOUND_CHUNK             1024
+#define SOUND_CHUNK_MIN         64      /* (not less at once) */
+#define SOUND_CATCH_UP_MAX      (PSX_SOUND_FRAME_SAMPLES * 4)
+static uint64_t s_sound_start_us;
+static int64_t s_sound_samples;         /* mixed since s_sound_start_us */
+static int16_t s_queue[QUEUE_SAMPLES][2];
+static int s_queue_read, s_queue_count;
+static int s_queue_short;               /* device frames the queue could not fill (the log) */
 void cd_mix_audio(int16_t *out, int frames, int volume_left, int volume_right);
 
 static void game_lock(void)
@@ -146,17 +162,81 @@ static void render_sound(int16_t *out, int frames)
 
 void psx_sound_frame(int16_t out[PSX_SOUND_FRAME_SAMPLES * 2])
 {
+    memset(out, 0, PSX_SOUND_FRAME_SAMPLES * 2 * sizeof(int16_t));
     if (!s_lock) {
-        memset(out, 0, PSX_SOUND_FRAME_SAMPLES * 2 * sizeof(int16_t));
         return;
     }
     threads_lock(s_lock);
-    if (s_sound_running) {
-        render_sound(out, PSX_SOUND_FRAME_SAMPLES);
-    } else {
-        memset(out, 0, PSX_SOUND_FRAME_SAMPLES * 2 * sizeof(int16_t));
+    int n = s_queue_count < PSX_SOUND_FRAME_SAMPLES ? s_queue_count : PSX_SOUND_FRAME_SAMPLES;
+    if (s_sound_running && n < PSX_SOUND_FRAME_SAMPLES) {
+        s_queue_short++;
     }
+    for (int i = 0; i < n; i++) {
+        out[i * 2] = s_queue[s_queue_read][0];
+        out[i * 2 + 1] = s_queue[s_queue_read][1];
+        s_queue_read = (s_queue_read + 1) % QUEUE_SAMPLES;
+    }
+    s_queue_count -= n;
     threads_unlock(s_lock);
+}
+
+/* Adds n samples of sound to the queue (the game's thread holds s_lock). */
+static void queue_sound(const int16_t *samples, int n)
+{
+    for (int i = 0; i < n; i++) {
+        if (s_queue_count == QUEUE_SAMPLES) {
+            s_queue_read = (s_queue_read + 1) % QUEUE_SAMPLES;     /* (drop the oldest) */
+            s_queue_count--;
+        }
+        int at = (s_queue_read + s_queue_count) % QUEUE_SAMPLES;
+        s_queue[at][0] = samples[i * 2];
+        s_queue[at][1] = samples[i * 2 + 1];
+        s_queue_count++;
+    }
+}
+
+/* Mixes the sound due by now, in real time as the SPU plays it while the
+ * game runs, with a sample or two more or less to keep the queue at its
+ * level (the PC's clock against the sound device's). */
+static void sound_update(void)
+{
+    int16_t chunk[SOUND_CHUNK * 2];
+    uint64_t now = irq_time_us();
+    int64_t due = (int64_t) ((now - s_sound_start_us) * SPU_SAMPLE_RATE / 1000000) - s_sound_samples;
+    if (due > SOUND_CATCH_UP_MAX) {
+        /* (the game stood still, e.g. paused: go on from here) */
+        s_sound_samples += due - SOUND_CATCH_UP_MAX;
+        due = SOUND_CATCH_UP_MAX;
+    }
+    if (due < SOUND_CHUNK_MIN) {
+        return;
+    }
+    s_sound_samples += due;
+    int n = (int) due + (s_queue_count < QUEUE_TARGET ? 2
+                         : s_queue_count > QUEUE_TARGET + PSX_SOUND_FRAME_SAMPLES ? -2 : 0);
+    while (n > 0) {
+        int part = n < SOUND_CHUNK ? n : SOUND_CHUNK;
+        render_sound(chunk, part);
+        if (!g_psx_skip_frames) {
+            queue_sound(chunk, part);   /* (fast forward: the sound goes on, unheard) */
+        }
+        n -= part;
+    }
+}
+
+/* the sound at the vertical blank */
+static void sound_vblank(void)
+{
+    if (s_sound_realtime) {
+        sound_update();
+        return;
+    }
+    /* (recorded or silent: exactly a frame each time, the same every run) */
+    int16_t frame[PSX_SOUND_FRAME_SAMPLES * 2];
+    render_sound(frame, PSX_SOUND_FRAME_SAMPLES);
+    if (s_audio_sink && !g_psx_skip_frames) {
+        s_audio_sink(frame, PSX_SOUND_FRAME_SAMPLES);
+    }
 }
 
 /* ---- time --------------------------------------------------------------- */
@@ -209,9 +289,12 @@ void psx_devices_reset(void)
     g_spu_trace = GetEnvironmentVariableA("RA_SPU_TRACE", NULL, 0) != 0;
     game_lock();                        /* (held while the game's code runs) */
     s_sound_running = 1;
+    s_queue_read = s_queue_count = 0;
     io_reset();
     spu_reset();
     irq_reset();
+    s_sound_start_us = irq_time_us();
+    s_sound_samples = 0;
     pad_reset();
     hle_reset_all();
 }
@@ -223,6 +306,12 @@ void psx_devices_stop(void)
     }
     threads_lock(s_lock);
     s_sound_running = 0;
+    s_queue_read = s_queue_count = 0;
+    extern int g_spu_unheard;
+    psx_log("sound: %d device frames not filled, %d voices stopped unheard", s_queue_short,
+            g_spu_unheard);
+    g_spu_unheard = 0;
+    s_queue_short = 0;
     threads_unlock(s_lock);
 }
 
@@ -366,11 +455,7 @@ void irq_vblank(void)
     s_vblank_count++;
     pad_update();
     cd_tick();
-    if (!s_sound_realtime && s_audio_sink && !g_psx_skip_frames) {
-        int16_t frame[PSX_SOUND_FRAME_SAMPLES * 2];
-        render_sound(frame, PSX_SOUND_FRAME_SAMPLES);
-        s_audio_sink(frame, PSX_SOUND_FRAME_SAMPLES);
-    }
+    sound_vblank();
     s_vblank_pending = 1;
     service();
 }
@@ -390,6 +475,9 @@ void rt_poll(void)
         return;
     }
     /* the game is busy (or waits in a loop): a vertical blank when it is due */
+    if (s_sound_realtime) {
+        sound_update();
+    }
     if (irq_time_us() - s_last_vblank_us >= FRAME_US) {
         irq_vblank();
     } else {
