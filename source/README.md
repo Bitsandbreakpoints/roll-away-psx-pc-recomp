@@ -11,7 +11,7 @@ The game plays: the Psygnosis movie, the title, the menus, Arcade mode with
 its 3D stages, the demo mode and the memory card (Load Game), with
 the XA music from the disc and the sound effects, keyboard or XInput
 controllers (two players) and graphics at up to 4x the internal resolution,
-an optional 16:9 widescreen mode, bilinear, soft-TV or four CRT filters (CRT, Soft CRT, Composite CRT,
+an optional 16:9 widescreen mode, true colour (no dithering), bilinear, soft-TV or four CRT filters (CRT, Soft CRT, Composite CRT,
 PVM). F1 (or Select+Start) pauses and opens a
 menu with the settings and Resume, Back to launcher and Quit game; Tab
 fast-forwards and Esc goes back to the launcher.

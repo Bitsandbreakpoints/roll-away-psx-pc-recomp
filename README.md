@@ -81,6 +81,8 @@ pause menu).
 **Pictures**
 - **Higher internal resolution**, up to 4×.
 - **Precise vertices**: no PS1 "wobble", perspective-correct textures.
+- **True colour**: smooth shading and transparency in 8 bits per colour,
+  without the console's dithering pattern.
 - **Picture filters**: sharp pixels, bilinear, a soft-TV filter (GTU-like)
   and four CRT looks: *CRT* (scanlines, mask, curvature), *Soft CRT* (a TV:
   the whole picture softened, HUD and text too, with soft scanlines and a

@@ -51,7 +51,7 @@ typedef struct {
             HiresVertex a, b;
         } line;
         struct {
-            uint16_t color;
+            uint32_t color;             /* a pixel of the copy */
         } fill;
         struct {
             float cx, cy, rx, ry;           /* original pixels, with the drawing offset */
@@ -65,7 +65,16 @@ typedef struct {
 static int s_scale;
 static int s_texture_filter;
 static int s_width, s_height;           /* of the copy */
-static uint16_t *s_vram;
+/* The copy's pixels: 8 bits per colour (R in the low byte, then G, B)
+ * and the mask bit.  Without true colour every pixel is still rounded to
+ * the console's 15 bits (and dithered like it), so the picture is the same
+ * as the console's at a higher resolution; with true colour the shading,
+ * the textures' modulation and the blending keep 8 bits and nothing is
+ * dithered. */
+#define PIXEL_MASK              0x80000000u
+#define PIXEL_RGB               0x00FFFFFFu
+static uint32_t *s_vram;
+static int s_true_color;
 static Command *s_queue;
 static int s_queued;
 static unsigned s_generation;           /* + 1 at every flush */
@@ -102,7 +111,7 @@ void hires_configure(int scale)
     }
     s_width = GPU_VRAM_WIDTH * scale;
     s_height = GPU_VRAM_HEIGHT * scale;
-    s_vram = (uint16_t *) malloc((size_t) s_width * s_height * sizeof(uint16_t));
+    s_vram = (uint32_t *) malloc((size_t) s_width * s_height * sizeof(uint32_t));
     if (!s_queue) {
         s_queue = (Command *) malloc(sizeof(Command) * QUEUE_SIZE);
     }
@@ -117,7 +126,12 @@ void hires_configure(int scale)
     psx_log("GPU: internal resolution %dx (%d threads)", scale, threads_count());
 }
 
-static uint16_t *pixel_at(int x, int y)
+void hires_set_true_color(int on)
+{
+    s_true_color = on;
+}
+
+static uint32_t *pixel_at(int x, int y)
 {
     return &s_vram[(size_t) y * s_width + x];
 }
@@ -155,6 +169,30 @@ static int clamp255(int value)
     return value < 0 ? 0 : value > 255 ? 255 : value;
 }
 
+static int expand5(int c)
+{
+    return (c << 3) | (c >> 2);
+}
+
+/* a console colour (15 bits and the mask bit) as a pixel of the copy */
+static uint32_t from_15bit(uint16_t c)
+{
+    return (uint32_t) expand5(c & 31) | (uint32_t) expand5((c >> 5) & 31) << 8
+           | (uint32_t) expand5((c >> 10) & 31) << 16 | (c & 0x8000 ? PIXEL_MASK : 0);
+}
+
+static uint16_t to_15bit(int r, int g, int b, int x, int y, int dither);
+
+/* r, g, b (0..255, may overflow) as a pixel of the copy: kept in true
+ * colour, otherwise rounded to 15 bits (dithered like the console) */
+static uint32_t pack_rgb(int r, int g, int b, int x, int y, int dither)
+{
+    if (s_true_color) {
+        return (uint32_t) clamp255(r) | (uint32_t) clamp255(g) << 8 | (uint32_t) clamp255(b) << 16;
+    }
+    return from_15bit(to_15bit(r, g, b, x, y, dither));
+}
+
 static uint16_t to_15bit(int r, int g, int b, int x, int y, int dither)
 {
     if (dither) {
@@ -169,35 +207,44 @@ static uint16_t to_15bit(int r, int g, int b, int x, int y, int dither)
     return (uint16_t) ((r >> 3) | (g >> 3) << 5 | (b >> 3) << 10);
 }
 
-static uint16_t blend(uint16_t back, uint16_t front, int mode)
+/* semi-transparency: back and front pixels of the copy, the result's colour */
+static uint32_t blend(uint32_t back, uint32_t front, int mode)
 {
-    int result = 0;
-    for (int shift = 0; shift < 15; shift += 5) {
-        int b = (back >> shift) & 31, f = (front >> shift) & 31, c;
+    uint32_t result = 0;
+    for (int shift = 0; shift < 24; shift += 8) {
+        int b = (int) ((back >> shift) & 0xFF), f = (int) ((front >> shift) & 0xFF), c;
+        if (!s_true_color) {
+            b >>= 3;                    /* (the console's 5 bits: exact, see expand5) */
+            f >>= 3;
+        }
         switch (mode) {
         case 0: c = (b + f) >> 1; break;
         case 1: c = b + f; break;
         case 2: c = b - f; break;
         default: c = b + (f >> 2); break;
         }
-        c = c < 0 ? 0 : c > 31 ? 31 : c;
-        result |= c << shift;
+        if (s_true_color) {
+            c = clamp255(c);
+        } else {
+            c = expand5(c < 0 ? 0 : c > 31 ? 31 : c);
+        }
+        result |= (uint32_t) c << shift;
     }
-    return (uint16_t) result;
+    return result;
 }
 
 /* one high-resolution pixel (inside the copy and the drawing area) */
 static void plot(const Command *c, int x, int y, int r, int g, int b, int u, int v)
 {
     const GpuPrim *p = &c->p;
-    uint16_t *dst = pixel_at(x, y);
-    uint16_t color;
-    uint16_t mask = (uint16_t) (c->e.set_mask << 15);
+    uint32_t *dst = pixel_at(x, y);
+    uint32_t color;
+    uint32_t mask = c->e.set_mask ? PIXEL_MASK : 0;
     int semi = p->semi;
     /* dithering in original pixels, as on the console */
     int dx = x / s_scale, dy = y / s_scale;
 
-    if (c->e.check_mask && (*dst & 0x8000)) {
+    if (c->e.check_mask && (*dst & PIXEL_MASK)) {
         return;
     }
     if (p->textured) {
@@ -206,15 +253,18 @@ static void plot(const Command *c, int x, int y, int r, int g, int b, int u, int
             return;
         }
         semi = p->semi && (t & 0x8000);
-        mask |= t & 0x8000;
+        mask |= t & 0x8000 ? PIXEL_MASK : 0;
         if (p->raw) {
-            color = t & 0x7FFF;
+            color = from_15bit(t) & PIXEL_RGB;
+        } else if (s_true_color) {
+            color = pack_rgb((expand5(t & 31) * r) >> 7, (expand5((t >> 5) & 31) * g) >> 7,
+                             (expand5((t >> 10) & 31) * b) >> 7, dx, dy, 0);
         } else {
-            color = to_15bit(((t & 31) * r) >> 4, (((t >> 5) & 31) * g) >> 4,
+            color = pack_rgb(((t & 31) * r) >> 4, (((t >> 5) & 31) * g) >> 4,
                              (((t >> 10) & 31) * b) >> 4, dx, dy, p->dither);
         }
     } else {
-        color = to_15bit(r, g, b, dx, dy, p->dither);
+        color = pack_rgb(r, g, b, dx, dy, p->dither);
     }
     if (semi) {
         color = blend(*dst, color, p->blend);
@@ -238,9 +288,9 @@ static void plot(const Command *c, int x, int y, int r, int g, int b, int u, int
 static void plot_filtered(const Command *c, int x, int y, int r, int g, int b, float u, float v)
 {
     const GpuPrim *p = &c->p;
-    uint16_t *dst = pixel_at(x, y);
+    uint32_t *dst = pixel_at(x, y);
 
-    if (c->e.check_mask && (*dst & 0x8000)) {
+    if (c->e.check_mask && (*dst & PIXEL_MASK)) {
         return;
     }
     /* the sample point between texel centres, as fixed point (floor) */
@@ -270,15 +320,26 @@ static void plot_filtered(const Command *c, int x, int y, int r, int g, int b, f
     int sr = 0, sg = 0, sb = 0, weight = 0;
     for (int i = 0; i < 4; i++) {
         if (t[i] != 0) {
-            sr += w[i] * (t[i] & 31);
-            sg += w[i] * ((t[i] >> 5) & 31);
-            sb += w[i] * ((t[i] >> 10) & 31);
+            if (s_true_color) {
+                sr += w[i] * expand5(t[i] & 31);
+                sg += w[i] * expand5((t[i] >> 5) & 31);
+                sb += w[i] * expand5((t[i] >> 10) & 31);
+            } else {
+                sr += w[i] * (t[i] & 31);
+                sg += w[i] * ((t[i] >> 5) & 31);
+                sb += w[i] * ((t[i] >> 10) & 31);
+            }
             weight += w[i];
         }
     }
-    /* texel channels as 0..248, like the 5-bit values times 8 */
+    /* texel channels as 0..248, like the 5-bit values times 8 (in true
+     * colour 0..255) */
     int tr, tg, tb;
-    if (weight == FILTER_ONE * FILTER_ONE) {
+    if (s_true_color) {
+        tr = sr / weight;
+        tg = sg / weight;
+        tb = sb / weight;
+    } else if (weight == FILTER_ONE * FILTER_ONE) {
         tr = sr >> (2 * FILTER_BITS - 3);
         tg = sg >> (2 * FILTER_BITS - 3);
         tb = sb >> (2 * FILTER_BITS - 3);
@@ -287,17 +348,18 @@ static void plot_filtered(const Command *c, int x, int y, int r, int g, int b, f
         tg = sg * 8 / weight;
         tb = sb * 8 / weight;
     }
-    uint16_t color;
+    uint32_t color;
     if (p->raw) {
-        color = to_15bit(tr, tg, tb, 0, 0, 0);
+        color = pack_rgb(tr, tg, tb, 0, 0, 0);
     } else {
-        color = to_15bit((tr * r) >> 7, (tg * g) >> 7, (tb * b) >> 7, x / s_scale, y / s_scale,
+        color = pack_rgb((tr * r) >> 7, (tg * g) >> 7, (tb * b) >> 7, x / s_scale, y / s_scale,
                          p->dither);
     }
     if (p->semi && (nearest & 0x8000)) {
         color = blend(*dst, color, p->blend);
     }
-    *dst = color | (uint16_t) (c->e.set_mask << 15) | (nearest & 0x8000);
+    *dst = (color & PIXEL_RGB) | (c->e.set_mask ? PIXEL_MASK : 0)
+           | (nearest & 0x8000 ? PIXEL_MASK : 0);
 }
 
 /* the drawing area in high-resolution pixels */
@@ -813,8 +875,8 @@ static void draw_sphere(const Command *c, int band_y1, int band_y2)
             if (cover <= 0) {
                 continue;
             }
-            uint16_t *dst = pixel_at(x, y);
-            if (c->e.check_mask && (*dst & 0x8000)) {
+            uint32_t *dst = pixel_at(x, y);
+            if (c->e.check_mask && (*dst & PIXEL_MASK)) {
                 continue;
             }
             cover = cover > 1 ? 1 : cover;
@@ -842,18 +904,18 @@ static void draw_sphere(const Command *c, int band_y1, int band_y2)
                 spec = 0;
             }
             float shade = AMBIENT + DIFFUSE * diffuse + FILL * -n[2];
-            float d = ((float) BAYER4[y & 3][x & 3] - 7.5f) * 0.5f;    /* +-4: hides the 5-bit steps */
+            float d = s_true_color ? 0.0f : ((float) BAYER4[y & 3][x & 3] - 7.5f) * 0.5f;
+            /* (+-4: hides the 5-bit steps) */
             int rgb[3];
             for (int i = 0; i < 3; i++) {
                 float v = colour[i] * shade + spec;
                 if (cover < 1) {
-                    float back = (float) (((*dst >> (i * 5)) & 31) << 3);
+                    float back = (float) ((*dst >> (i * 8)) & 0xFF);
                     v = back + (v - back) * cover;
                 }
                 rgb[i] = clamp255((int) (v + d));
             }
-            *dst = (uint16_t) ((rgb[0] >> 3) | (rgb[1] >> 3) << 5 | (rgb[2] >> 3) << 10
-                               | c->e.set_mask << 15);
+            *dst = pack_rgb(rgb[0], rgb[1], rgb[2], 0, 0, 0) | (c->e.set_mask ? PIXEL_MASK : 0);
         }
     }
 }
@@ -870,7 +932,7 @@ void hires_fill(int x, int y, int w, int h, uint16_t color)
     c->min_y = y * s_scale;
     c->max_x = (x + w) * s_scale - 1;
     c->max_y = (y + h) * s_scale - 1;
-    c->u.fill.color = color;
+    c->u.fill.color = from_15bit(color);
 }
 
 /* (fills wrap around the edges of VRAM like the original) */
@@ -899,9 +961,9 @@ void hires_copy_from_original(int x, int y, int w, int h)
             int ox = (x + col) & (GPU_VRAM_WIDTH - 1);
             uint16_t value = g_vram[oy][ox];
             for (int sy = 0; sy < s_scale; sy++) {
-                uint16_t *dst = pixel_at(ox * s_scale, oy * s_scale + sy);
+                uint32_t *dst = pixel_at(ox * s_scale, oy * s_scale + sy);
                 for (int sx = 0; sx < s_scale; sx++) {
-                    dst[sx] = value;
+                    dst[sx] = from_15bit(value);
                 }
             }
         }
@@ -917,11 +979,11 @@ void hires_move(int sx, int sy, int dx, int dy, int w, int h, int set_mask, int 
     for (int row = 0; row < h * s_scale; row++) {
         int from_y = (sy * s_scale + row) % s_height, to_y = (dy * s_scale + row) % s_height;
         for (int col = 0; col < w * s_scale; col++) {
-            uint16_t *dst = pixel_at((dx * s_scale + col) % s_width, to_y);
-            if (check_mask && (*dst & 0x8000)) {
+            uint32_t *dst = pixel_at((dx * s_scale + col) % s_width, to_y);
+            if (check_mask && (*dst & PIXEL_MASK)) {
                 continue;
             }
-            *dst = *pixel_at((sx * s_scale + col) % s_width, from_y) | (uint16_t) (set_mask << 15);
+            *dst = *pixel_at((sx * s_scale + col) % s_width, from_y) | (set_mask ? PIXEL_MASK : 0);
         }
     }
 }
@@ -992,11 +1054,6 @@ void hires_flush(void)
     s_generation++;
 }
 
-static uint32_t expand_5bit(int c)
-{
-    return (uint32_t) ((c << 3) | (c >> 2));
-}
-
 typedef struct {
     uint32_t *out;
     int x, y, w, h;                     /* high-resolution pixels */
@@ -1012,9 +1069,7 @@ static void read_rows(int task, void *context)
         uint32_t *out = job->out + (size_t) row * job->w;
         int vy = (job->y + row) % s_height;
         for (int col = 0; col < job->w; col++) {
-            uint16_t p = *pixel_at((job->x + col) % s_width, vy);
-            *out++ = 0xFF000000u | expand_5bit(p & 31) | expand_5bit((p >> 5) & 31) << 8
-                     | expand_5bit((p >> 10) & 31) << 16;
+            *out++ = 0xFF000000u | (*pixel_at((job->x + col) % s_width, vy) & PIXEL_RGB);
         }
     }
 }

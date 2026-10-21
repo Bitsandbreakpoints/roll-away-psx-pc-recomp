@@ -55,6 +55,9 @@ int hires_scale(void);          /* 0 while off */
  * have a depth from the GTE); 2D graphics stay sharp. */
 void hires_set_texture_filter(int on);
 
+/* True colour: the copy keeps 8 bits per colour and is not dithered. */
+void hires_set_true_color(int on);
+
 void hires_triangle(const GpuPrim *p, const GpuEnv *e, const HiresVertex *v0,
                     const HiresVertex *v1, const HiresVertex *v2);
 void hires_rectangle(const GpuPrim *p, const GpuEnv *e, int x, int y, int w, int h,

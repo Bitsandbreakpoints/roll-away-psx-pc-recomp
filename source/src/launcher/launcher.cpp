@@ -216,6 +216,9 @@ static void graphics_tab(void)
     check("##textures", &s->texture_filtering);
     note("3D surfaces only; 2D stays sharp");
     ImGui::EndDisabled();
+    row("True colour");
+    check("##truecolor", &s->true_color);
+    note("smooth shading without the console's dithering (8 bits per colour)");
     help("The internal resolution is drawn in software on all cores; high values need a fast "
          "processor. Everything here can be changed during the game with F1.");
 }

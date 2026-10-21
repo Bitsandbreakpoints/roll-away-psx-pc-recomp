@@ -99,11 +99,20 @@ void gpu_reset(void)
 
 static int s_widescreen;                /* (the widescreen mode, below) */
 
+static int s_true_color;
+
+void gpu_set_true_color(int on)
+{
+    s_true_color = on;
+    hires_set_true_color(on);
+}
+
 void gpu_set_enhancements(int scale, int precise_vertices, int texture_filter)
 {
     g_pgxp_enabled = precise_vertices;
     g_pgxp_track = precise_vertices || s_widescreen;
-    hires_configure(scale > 1 || precise_vertices ? scale : 0);
+    /* (true colour lives in the high-resolution copy: on also at 1x) */
+    hires_configure(scale > 1 || precise_vertices || s_true_color ? scale : 0);
     hires_set_texture_filter(precise_vertices && texture_filter);
 }
 

@@ -71,6 +71,11 @@ int gpu_display_lines(void);
  * draws only the original VRAM. */
 void gpu_set_enhancements(int scale, int precise_vertices, int texture_filter);
 
+/* True colour: shading and blending in 8 bits per colour, no dithering
+ * (the picture shown; the game's own VRAM stays 15-bit).  Before
+ * gpu_set_enhancements(). */
+void gpu_set_true_color(int on);
+
 /* A frame that will not be shown (fast forward): the high-resolution copy
  * skips drawing it. */
 void gpu_skip_frame(void);

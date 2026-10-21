@@ -111,6 +111,7 @@ static void set_value(Settings *s, const char *section, const char *key, const c
         else if (strcmp(key, "smooth_filtering") == 0) s->video_filter = n != 0;   /* (older) */
         else if (strcmp(key, "video_filter") == 0) s->video_filter = clampi(n, 0, VIDEO_FILTER_COUNT - 1);
         else if (strcmp(key, "precise_vertices") == 0) s->precise_vertices = n != 0;
+        else if (strcmp(key, "true_color") == 0) s->true_color = n != 0;
         else if (strcmp(key, "texture_filtering") == 0) s->texture_filtering = n != 0;
     } else if (strcmp(section, "sound") == 0) {
         if (strcmp(key, "master") == 0) s->volume_master = clampi(n, 0, 100);
@@ -214,8 +215,8 @@ int settings_save(void)
     fprintf(f, "vsync = %d\n; 1..%d times 320x240\ninternal_scale = %d\n", s->vsync, HIRES_MAX_SCALE,
             s->internal_scale);
     fprintf(f, "; 0 = 4:3, 1 = stretch, 2 = 16:9 widescreen\naspect = %d\n", s->aspect);
-    fprintf(f, "; 0 = sharp, 1 = bilinear, 2 = CRT, 3 = soft TV, 4 = soft CRT, 5 = composite CRT, 6 = PVM\nvideo_filter = %d\nprecise_vertices = %d\ntexture_filtering = %d\n\n",
-            s->video_filter, s->precise_vertices, s->texture_filtering);
+    fprintf(f, "; 0 = sharp, 1 = bilinear, 2 = CRT, 3 = soft TV, 4 = soft CRT, 5 = composite CRT, 6 = PVM\nvideo_filter = %d\nprecise_vertices = %d\ntexture_filtering = %d\n; 1 = 8 bits per colour, no dithering\ntrue_color = %d\n\n",
+            s->video_filter, s->precise_vertices, s->texture_filtering, s->true_color);
     fprintf(f, "[sound]\nmaster = %d\nmusic = %d\neffects = %d\n\n", s->volume_master,
             s->volume_music, s->volume_effects);
     for (int p = 0; p < SETTINGS_PLAYERS; p++) {

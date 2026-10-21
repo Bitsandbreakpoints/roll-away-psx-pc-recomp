@@ -284,11 +284,13 @@ static void apply_game_settings(void)
 {
     /* (tests: RA_NATIVE=1 draws like the console, for comparisons) */
     if (GetEnvironmentVariableA("RA_NATIVE", NULL, 0)) {
+        gpu_set_true_color(0);
         gpu_set_enhancements(1, 0, 0);
         gte_set_widescreen(0);
         gpu_set_widescreen(0);
     } else {
         gte_set_widescreen(g_settings_pc.aspect == ASPECT_WIDESCREEN);
+        gpu_set_true_color(g_settings_pc.true_color);
         gpu_set_widescreen(g_settings_pc.aspect == ASPECT_WIDESCREEN);
         gpu_set_enhancements(g_settings_pc.internal_scale, g_settings_pc.precise_vertices,
                              g_settings_pc.texture_filtering);
