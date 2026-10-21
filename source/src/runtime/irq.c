@@ -308,6 +308,9 @@ void psx_devices_stop(void)
     threads_lock(s_lock);
     s_sound_running = 0;
     s_queue_read = s_queue_count = 0;
+    extern int g_pgxp_stats[3];
+    psx_log("pgxp: %d vertices, %d precise, %d projected by the GTE", g_pgxp_stats[0],
+            g_pgxp_stats[1], g_pgxp_stats[2]);
     extern int g_spu_unheard, g_xa_underruns;
     psx_log("sound: %d device frames not filled, %d voices stopped unheard, XA ran dry %d times",
             s_queue_short, g_spu_unheard, g_xa_underruns);

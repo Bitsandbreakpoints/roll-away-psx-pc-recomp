@@ -97,9 +97,12 @@ void gpu_reset(void)
     hires_copy_from_original(0, 0, GPU_VRAM_WIDTH, GPU_VRAM_HEIGHT);
 }
 
+static int s_widescreen;                /* (the widescreen mode, below) */
+
 void gpu_set_enhancements(int scale, int precise_vertices, int texture_filter)
 {
     g_pgxp_enabled = precise_vertices;
+    g_pgxp_track = precise_vertices || s_widescreen;
     hires_configure(scale > 1 || precise_vertices ? scale : 0);
     hires_set_texture_filter(precise_vertices && texture_filter);
 }
@@ -407,7 +410,7 @@ static int s_widescreen;
 void gpu_set_widescreen(int on)
 {
     s_widescreen = on;
-    g_pgxp_track = on;
+    g_pgxp_track = on || g_pgxp_enabled;
 }
 
 /*
@@ -534,6 +537,8 @@ static void prim_from_state(Prim *p)
     p->blend = s.blend;
 }
 
+int g_pgxp_stats[3];               /* (debugging: vertices, precise, projected) */
+
 /* a vertex for the high-resolution copy: the GTE's float position and
  * depth if this packet word came from it */
 static void hires_vertex(HiresVertex *h, const Vertex *v, int word_index)
@@ -547,8 +552,19 @@ static void hires_vertex(HiresVertex *h, const Vertex *v, int word_index)
     h->b = v->b;
     h->u = v->u;
     h->v = v->v;
+    g_pgxp_stats[0]++;
+    if (g_pgxp_enabled && gte_projected_lately(s_cmd[word_index])) {
+        g_pgxp_stats[2]++;              /* (a position the GTE projected) */
+    }
     if (g_pgxp_enabled && s_cmd_src[word_index]
         && pgxp_lookup(s_cmd_src[word_index], s_cmd[word_index], &pv)) {
+        g_pgxp_stats[1]++;
+        h->x = pv.x + (float) s.off_x;
+        h->y = pv.y + (float) s.off_y;
+        h->z = pv.z;
+    } else if (g_pgxp_enabled && gte_precise_lately(s_cmd[word_index], &pv)) {
+        /* (a projected position the game copied into the packet itself) */
+        g_pgxp_stats[1]++;
         h->x = pv.x + (float) s.off_x;
         h->y = pv.y + (float) s.off_y;
         h->z = pv.z;

@@ -12,6 +12,7 @@
 #define PSX_GTE_H
 
 #include <stdint.h>
+#include "psx/pgxp.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -78,6 +79,11 @@ void gte_set_widescreen(int on);
  * of them.  The widescreen mode tells 3D polygons from 2D by it, also when
  * the game copied the positions into its packets itself. */
 int gte_projected_lately(uint32_t sxy);
+
+/* The same with precise vertices: TRUE and the float position and depth
+ * if `sxy` was projected lately by one vertex only (no other projection
+ * in that frame rounded to it from elsewhere). */
+int gte_precise_lately(uint32_t sxy, PgxpVertex *v);
 
 /* A new frame (the vertical blank): positions older than two are forgotten. */
 void gte_new_frame(void);
