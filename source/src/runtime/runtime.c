@@ -19,6 +19,8 @@
 #include "disc/disc.h"
 #include "disc/sha1.h"
 #include "psx/log.h"
+#include "psx/pgxp.h"
+#include "psx/gte.h"
 
 Cpu g_cpu;
 uint32_t g_rt_ram_write_limit = RT_RAM_SIZE;
@@ -146,6 +148,60 @@ void rt_swc2(int reg, uint32_t address)
         gte_swc2(reg, &value);
         mem_write(address, value, 4);
     }
+}
+
+/* ---- precise vertices through the CPU ------------------------------------ */
+
+uint32_t g_pgxp_reg_valid;
+static uint32_t s_pgxp_value[32];
+static PgxpVertex s_pgxp_vertex[32];
+
+void rt_pgxp_mfc2(int rt, int reg)
+{
+    PgxpVertex v;
+    if (g_pgxp_track && gte_precise_sxy(reg, &v)) {
+        g_pgxp_reg_valid |= 1u << rt;
+        s_pgxp_value[rt] = GPR[rt];
+        s_pgxp_vertex[rt] = v;
+    } else {
+        g_pgxp_reg_valid &= ~(1u << rt);
+    }
+}
+
+void rt_pgxp_sw(int rt, uint32_t address)
+{
+    if (GPR[rt] != s_pgxp_value[rt]) {
+        g_pgxp_reg_valid &= ~(1u << rt);    /* (changed since: not a position any more) */
+        return;
+    }
+    void *p = rt_pointer(address);
+    if (p) {
+        pgxp_store(p, GPR[rt], &s_pgxp_vertex[rt]);
+    }
+}
+
+void rt_pgxp_lw(int rt, uint32_t address)
+{
+    PgxpVertex v;
+    void *p = rt_pointer(address);
+    if (p && pgxp_lookup(p, GPR[rt], &v)) {
+        g_pgxp_reg_valid |= 1u << rt;
+        s_pgxp_value[rt] = GPR[rt];
+        s_pgxp_vertex[rt] = v;
+    } else {
+        g_pgxp_reg_valid &= ~(1u << rt);
+    }
+}
+
+void rt_pgxp_move(int rd, int rs)
+{
+    if (GPR[rs] != s_pgxp_value[rs]) {
+        g_pgxp_reg_valid &= ~(1u << rs);
+        return;
+    }
+    g_pgxp_reg_valid |= 1u << rd;
+    s_pgxp_value[rd] = s_pgxp_value[rs];
+    s_pgxp_vertex[rd] = s_pgxp_vertex[rs];
 }
 
 /* ---- coprocessor 0 and exceptions -------------------------------------- */
@@ -371,6 +427,7 @@ void psx_run_game(PsxFrameHook hook)
     g_cpu.cop0[12] = SR_START;
     g_rt_ram_write_limit = RT_RAM_SIZE;
     g_rt_module = NULL;
+    g_pgxp_reg_valid = 0;
     gte_reset();
     psx_devices_reset();
     psx_log("game started");

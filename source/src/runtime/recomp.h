@@ -168,6 +168,22 @@ static inline void rt_divu(uint32_t a, uint32_t b)
     }
 }
 
+/* ---- precise vertices through the CPU (runtime.c) ------------------------ */
+
+/* A screen position read from the GTE (mfc2 of SXY0..2/SXYP) keeps its
+ * float position while it stays in a register (moves too); stored with sw
+ * it goes with the value to that address, where the GPU finds it in the
+ * packet (pgxp.h).  The game copies most of its projected positions so. */
+extern uint32_t g_pgxp_reg_valid;      /* registers holding a precise position */
+void rt_pgxp_mfc2(int rt, int reg);
+void rt_pgxp_sw(int rt, uint32_t address);
+void rt_pgxp_move(int rd, int rs);
+void rt_pgxp_lw(int rt, uint32_t address);
+extern int g_pgxp_track;          /* (pgxp.h) */
+#define RT_PGXP_SW(rt, a)     do { if (g_pgxp_reg_valid & (1u << (rt))) rt_pgxp_sw((rt), (a)); } while (0)
+#define RT_PGXP_LW(rt, a) do { if (g_pgxp_track) rt_pgxp_lw((rt), (a)); } while (0)
+#define RT_PGXP_MOVE(rd, rs)     do { if (g_pgxp_reg_valid & (1u << (rs))) rt_pgxp_move((rd), (rs)); } while (0)
+
 /* ---- the rest (runtime.c) ---------------------------------------------- */
 
 /* GTE loads/stores (the address is a PS1 address) */

@@ -41,11 +41,12 @@ void gte_set_widescreen(int on)
  * position and depth of up to GTE_CANDIDATES vertices that rounded to it in
  * that frame.  The game copies many projected positions into its packets
  * itself (not with swc2), so the address does not tell where they came
- * from; the value does.  Small objects (coins, fruit) have several
- * vertices on one whole pixel: the GPU chooses among them by depth
- * (gte_precise_candidates()). */
+ * from; the value does (as a fallback for what runtime.c's tracking of
+ * mfc2 -> sw misses), but only where one vertex rounded to it: small
+ * objects (coins, fruit) have several vertices on one whole pixel. */
 #define SEEN_SLOTS              16384   /* (a power of 2) */
 #define SEEN_PROBES             8
+#define GTE_CANDIDATES          4
 #define SEEN_FRAMES             2
 #define SAME_XY                 0.05f   /* pixels */
 #define SAME_Z                  0.005f  /* of the depth */
@@ -138,17 +139,6 @@ int gte_precise_lately(uint32_t sxy, PgxpVertex *v)
     return 1;
 }
 
-int gte_precise_candidates(uint32_t sxy, PgxpVertex out[GTE_CANDIDATES])
-{
-    const Seen *e = find_projected(sxy);
-    if (!e) {
-        return 0;
-    }
-    for (int i = 0; i < e->count; i++) {
-        out[i] = e->candidate[i];
-    }
-    return e->count;
-}
 #define FLAG_SY2                (1u << 13)
 #define FLAG_IR0                (1u << 12)
 
@@ -876,4 +866,14 @@ void gte_cop2(uint32_t command)
     if (g.flag & GTE_FLAG_ERROR) {
         g.flag |= GTE_FLAG_ERROR_BIT;
     }
+}
+
+int gte_precise_sxy(int reg, PgxpVertex *v)
+{
+    int n = reg == GTE_SXYP ? 2 : reg - GTE_SXY0;
+    if (n < 0 || n > 2 || !s_precise_valid[n]) {
+        return 0;
+    }
+    *v = s_precise[n];
+    return 1;
 }

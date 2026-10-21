@@ -369,9 +369,16 @@ def condition(i):
     }[i.op]
 
 
+GTE_SXY_REGS = (12, 13, 14, 15)     # SXY0..2, SXYP
+
+
 def simple(i):
     """C for an instruction without control flow."""
     op, rs, rt, rd = i.op, i.rs, i.rt, i.rd
+    # a register copied (move: or/addu with $zero) keeps its precise vertex
+    if op in ('or', 'addu') and rd and (rs == 0) != (rt == 0):
+        src = rt if rs == 0 else rs
+        return W(rd, R(src)) + f' RT_PGXP_MOVE({rd}, {src});'
     if op == 'sll':
         return W(rd, f'{R(rt)} << {i.sa}') if i.sa else W(rd, R(rt))
     if op == 'srl':
@@ -433,7 +440,10 @@ def simple(i):
     if op == 'lhu':
         return W(rt, f'RD16({ea(i)})')
     if op == 'lw':
-        return W(rt, f'RD32({ea(i)})')
+        if not rt:
+            return W(rt, f'RD32({ea(i)})')
+        # (precise vertices: a screen position loaded keeps its float position)
+        return f'{{ uint32_t a_ = {ea(i)}; GPR[{rt}] = RD32(a_); RT_PGXP_LW({rt}, a_); }}'
     if op == 'lwl':
         return W(rt, f'rt_lwl({R(rt)}, {ea(i)})')
     if op == 'lwr':
@@ -443,7 +453,9 @@ def simple(i):
     if op == 'sh':
         return f'WR16({ea(i)}, {R(rt)});'
     if op == 'sw':
-        return f'WR32({ea(i)}, {R(rt)});'
+        # (precise vertices: a screen position the CPU stores goes with it)
+        track = f' RT_PGXP_SW({rt}, {ea(i)});' if rt else ''
+        return f'WR32({ea(i)}, {R(rt)});' + track
     if op == 'swl':
         return f'rt_swl({ea(i)}, {R(rt)});'
     if op == 'swr':
@@ -453,6 +465,8 @@ def simple(i):
     if op == 'swc2':
         return f'rt_swc2({rt}, {ea(i)});'
     if op == 'mfc2':
+        if rt and rd in GTE_SXY_REGS:
+            return W(rt, f'gte_mfc2({rd})') + f' rt_pgxp_mfc2({rt}, {rd});'
         return W(rt, f'gte_mfc2({rd})')
     if op == 'cfc2':
         return W(rt, f'gte_cfc2({rd})')

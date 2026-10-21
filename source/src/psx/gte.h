@@ -85,10 +85,9 @@ int gte_projected_lately(uint32_t sxy);
  * in that frame rounded to it from elsewhere). */
 int gte_precise_lately(uint32_t sxy, PgxpVertex *v);
 
-/* All the precise vertices that rounded to `sxy` lately (several when
- * vertices of a small object fall on one pixel); returns how many. */
-#define GTE_CANDIDATES          4
-int gte_precise_candidates(uint32_t sxy, PgxpVertex out[GTE_CANDIDATES]);
+/* The precise vertex of SXY0..2 / SXYP (registers 12..15), if there is
+ * one (mfc2 of a screen position: runtime.c tracks it through the CPU). */
+int gte_precise_sxy(int reg, PgxpVertex *v);
 
 /* A new frame (the vertical blank): positions older than two are forgotten. */
 void gte_new_frame(void);
