@@ -27,6 +27,9 @@ static ID3D11ShaderResourceView *s_video_view;
 static int s_video_w, s_video_h;
 static ID3D11PixelShader *s_crt;          /* UI_VIDEO_CRT; NULL if it did not compile */
 static ID3D11PixelShader *s_tv;           /* UI_VIDEO_TV */
+static ID3D11PixelShader *s_soft_crt;     /* UI_VIDEO_SOFT_CRT */
+static ID3D11PixelShader *s_composite;    /* UI_VIDEO_COMPOSITE */
+static ID3D11PixelShader *s_pvm;          /* UI_VIDEO_PVM */
 static float s_crt_width;
 static ID3D11Buffer *s_crt_constants;
 static float s_crt_lines;
@@ -124,6 +127,228 @@ float4 main(PS_INPUT input) : SV_Target
     colour *= mask;
     float corner = 16.0 * uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y);
     colour *= pow(saturate(corner), 0.18);
+    return float4(sqrt(saturate(colour)), 1.0) * input.col;
+}
+)";
+
+/* Soft CRT: a consumer TV.  The signal's limited bandwidth (a Gaussian
+ * low-pass in the console's pixels, as the soft TV filter) smooths the
+ * whole picture - 3D, sprites and text alike; then each of the picture's
+ * lines is a beam whose width grows with brightness (soft scanlines that
+ * blend into each other), a faint shadow mask, a glow around bright parts
+ * (halation), a slight curvature and darker corners.  Linear light. */
+static const char SOFT_CRT_SHADER[] = R"(
+cbuffer Crt : register(b0)
+{
+    float4 crt;                         /* x: lines, y: pixels across (the console's) */
+};
+struct PS_INPUT
+{
+    float4 pos : SV_POSITION;
+    float4 col : COLOR0;
+    float2 uv  : TEXCOORD0;
+};
+sampler sampler0;
+Texture2D texture0;
+
+static const float SIGMA_X = 0.70;      /* the signal's softness, in console pixels */
+static const float GLOW_SIGMA = 1.6;    /* halation, in console pixels */
+static const float GLOW = 0.16;
+static const float CURVE = 0.045;
+
+float3 fetch(float2 uv)
+{
+    float3 c = texture0.Sample(sampler0, uv).rgb;
+    return c * c;                       /* roughly linear light */
+}
+
+/* one line of the picture, low-passed across, at height v (its centre) */
+float3 line_colour(float u, float v)
+{
+    float step = 1.0 / crt.y;
+    float3 sum = float3(0.0, 0.0, 0.0);
+    float total = 0.0;
+    [unroll] for (int i = -3; i <= 3; i++) {
+        float dx = i * 0.5;
+        float w = exp(-(dx * dx) / (2.0 * SIGMA_X * SIGMA_X));
+        sum += fetch(float2(u + dx * step, v)) * w;
+        total += w;
+    }
+    return sum / total;
+}
+
+float beam(float distance, float3 colour)
+{
+    float sigma = 0.235 + 0.15 * dot(colour, float3(0.3, 0.59, 0.11));
+    return exp(-distance * distance / (2.0 * sigma * sigma));
+}
+
+float4 main(PS_INPUT input) : SV_Target
+{
+    float2 centre = input.uv - 0.5;
+    float2 uv = input.uv + centre * dot(centre, centre) * CURVE;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
+        return float4(0.0, 0.0, 0.0, 1.0);
+    float lines = crt.x;
+    float y = uv.y * lines - 0.5;
+    float row = floor(y);
+    float f = y - row;
+    float3 c0 = line_colour(uv.x, (row + 0.5) / lines);
+    float3 c1 = line_colour(uv.x, (row + 1.5) / lines);
+    float3 colour = c0 * beam(f, c0) + c1 * beam(1.0 - f, c1);
+    colour *= 1.42;
+    /* halation: a wide blur of the picture added on top */
+    float2 step = float2(1.0 / crt.y, 1.0 / lines);
+    float3 glow = float3(0.0, 0.0, 0.0);
+    float total = 0.0;
+    [unroll] for (int j = -2; j <= 2; j++) {
+        [unroll] for (int i = -2; i <= 2; i++) {
+            float2 d = float2(i, j) * GLOW_SIGMA * 0.8;
+            float w = exp(-dot(d, d) / (2.0 * GLOW_SIGMA * GLOW_SIGMA));
+            glow += fetch(uv + d * step) * w;
+            total += w;
+        }
+    }
+    colour += glow / total * GLOW;
+    /* a faint shadow mask (triads of window pixels) */
+    float3 mask = float3(0.94, 0.94, 0.94);
+    int column = (int) fmod(input.pos.x + floor(input.pos.y / 2.0) * 1.5, 3.0);
+    if (column == 0) mask.r = 1.06; else if (column == 1) mask.g = 1.06; else mask.b = 1.06;
+    colour *= mask;
+    float corner = 16.0 * uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y);
+    colour *= pow(saturate(corner), 0.15);
+    return float4(sqrt(saturate(colour)), 1.0) * input.col;
+}
+)";
+
+/* Composite CRT: a TV fed by a composite cable.  Brightness and colour
+ * are low-passed apart (YIQ): the colour is blurred much wider than the
+ * brightness, so it bleeds past edges; soft scanlines and a slight
+ * curvature.  Linear light for the scanlines. */
+static const char COMPOSITE_SHADER[] = R"(
+cbuffer Crt : register(b0)
+{
+    float4 crt;                         /* x: lines, y: pixels across (the console's) */
+};
+struct PS_INPUT
+{
+    float4 pos : SV_POSITION;
+    float4 col : COLOR0;
+    float2 uv  : TEXCOORD0;
+};
+sampler sampler0;
+Texture2D texture0;
+
+static const float LUMA_SIGMA = 0.65;   /* in console pixels */
+static const float CHROMA_SIGMA = 1.9;
+static const float CURVE = 0.04;
+
+float3 to_yiq(float3 c)
+{
+    return float3(dot(c, float3(0.299, 0.587, 0.114)), dot(c, float3(0.596, -0.274, -0.322)),
+                  dot(c, float3(0.211, -0.523, 0.312)));
+}
+
+float3 to_rgb(float3 c)
+{
+    return float3(dot(c, float3(1.0, 0.956, 0.621)), dot(c, float3(1.0, -0.272, -0.647)),
+                  dot(c, float3(1.0, -1.106, 1.703)));
+}
+
+/* one line of the picture as the cable carries it, in linear light */
+float3 line_colour(float u, float v)
+{
+    float step = 1.0 / crt.y;
+    float luma = 0.0, luma_total = 0.0;
+    float2 chroma = float2(0.0, 0.0);
+    float chroma_total = 0.0;
+    [unroll] for (int i = -6; i <= 6; i++) {
+        float dx = i * 0.5;
+        float3 yiq = to_yiq(texture0.Sample(sampler0, float2(u + dx * step, v)).rgb);
+        float wl = exp(-(dx * dx) / (2.0 * LUMA_SIGMA * LUMA_SIGMA));
+        float wc = exp(-(dx * dx) / (2.0 * CHROMA_SIGMA * CHROMA_SIGMA));
+        luma += yiq.x * wl;
+        luma_total += wl;
+        chroma += yiq.yz * wc;
+        chroma_total += wc;
+    }
+    float3 c = saturate(to_rgb(float3(luma / luma_total, chroma / chroma_total)));
+    return c * c;
+}
+
+float4 main(PS_INPUT input) : SV_Target
+{
+    float2 centre = input.uv - 0.5;
+    float2 uv = input.uv + centre * dot(centre, centre) * CURVE;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
+        return float4(0.0, 0.0, 0.0, 1.0);
+    float lines = crt.x;
+    float y = uv.y * lines - 0.5;
+    float row = floor(y);
+    float f = y - row;
+    float3 c0 = line_colour(uv.x, (row + 0.5) / lines);
+    float3 c1 = line_colour(uv.x, (row + 1.5) / lines);
+    float s0 = 0.25 + 0.15 * dot(c0, float3(0.3, 0.59, 0.11));
+    float s1 = 0.25 + 0.15 * dot(c1, float3(0.3, 0.59, 0.11));
+    float3 colour = c0 * exp(-f * f / (2.0 * s0 * s0))
+                    + c1 * exp(-(1.0 - f) * (1.0 - f) / (2.0 * s1 * s1));
+    colour *= 1.38;
+    float corner = 16.0 * uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y);
+    colour *= pow(saturate(corner), 0.15);
+    return float4(sqrt(saturate(colour)), 1.0) * input.col;
+}
+)";
+
+/* PVM: a studio monitor.  Little softness across, narrow beams (clear,
+ * dark scanlines), an aperture grille and a flat screen. */
+static const char PVM_SHADER[] = R"(
+cbuffer Crt : register(b0)
+{
+    float4 crt;                         /* x: lines, y: pixels across (the console's) */
+};
+struct PS_INPUT
+{
+    float4 pos : SV_POSITION;
+    float4 col : COLOR0;
+    float2 uv  : TEXCOORD0;
+};
+sampler sampler0;
+Texture2D texture0;
+
+static const float SIGMA_X = 0.38;      /* in console pixels */
+
+float3 line_colour(float u, float v)
+{
+    float step = 1.0 / crt.y;
+    float3 sum = float3(0.0, 0.0, 0.0);
+    float total = 0.0;
+    [unroll] for (int i = -2; i <= 2; i++) {
+        float dx = i * 0.5;
+        float w = exp(-(dx * dx) / (2.0 * SIGMA_X * SIGMA_X));
+        float3 c = texture0.Sample(sampler0, float2(u + dx * step, v)).rgb;
+        sum += c * c * w;
+        total += w;
+    }
+    return sum / total;
+}
+
+float4 main(PS_INPUT input) : SV_Target
+{
+    float lines = crt.x;
+    float y = input.uv.y * lines - 0.5;
+    float row = floor(y);
+    float f = y - row;
+    float3 c0 = line_colour(input.uv.x, (row + 0.5) / lines);
+    float3 c1 = line_colour(input.uv.x, (row + 1.5) / lines);
+    float s0 = 0.17 + 0.13 * dot(c0, float3(0.3, 0.59, 0.11));
+    float s1 = 0.17 + 0.13 * dot(c1, float3(0.3, 0.59, 0.11));
+    float3 colour = c0 * exp(-f * f / (2.0 * s0 * s0))
+                    + c1 * exp(-(1.0 - f) * (1.0 - f) / (2.0 * s1 * s1));
+    colour *= 1.7;
+    float3 mask = float3(0.78, 0.78, 0.78);
+    int column = (int) fmod(input.pos.x, 3.0);
+    if (column == 0) mask.r = 1.15; else if (column == 1) mask.g = 1.15; else mask.b = 1.15;
+    colour *= mask;
     return float4(sqrt(saturate(colour)), 1.0) * input.col;
 }
 )";
@@ -250,6 +475,11 @@ void ui_init(void)
     ID3D11Device *device = (ID3D11Device *) platform_d3d_device();
     s_crt = compile_pixel_shader(device, CRT_SHADER, sizeof(CRT_SHADER) - 1, "crt");
     s_tv = compile_pixel_shader(device, TV_SHADER, sizeof(TV_SHADER) - 1, "tv");
+    s_soft_crt = compile_pixel_shader(device, SOFT_CRT_SHADER, sizeof(SOFT_CRT_SHADER) - 1,
+                                      "soft_crt");
+    s_composite = compile_pixel_shader(device, COMPOSITE_SHADER, sizeof(COMPOSITE_SHADER) - 1,
+                                       "composite");
+    s_pvm = compile_pixel_shader(device, PVM_SHADER, sizeof(PVM_SHADER) - 1, "pvm");
     {
         D3D11_BUFFER_DESC desc = {};
         desc.ByteWidth = 16;
@@ -267,9 +497,12 @@ void ui_shutdown(void)
         s_crt->Release();
         s_crt = NULL;
     }
-    if (s_tv) {
-        s_tv->Release();
-        s_tv = NULL;
+    ID3D11PixelShader **shaders[] = { &s_tv, &s_soft_crt, &s_composite, &s_pvm };
+    for (ID3D11PixelShader **shader : shaders) {
+        if (*shader) {
+            (*shader)->Release();
+            *shader = NULL;
+        }
     }
     if (s_crt_constants) {
         s_crt_constants->Release();
@@ -464,7 +697,11 @@ static void use_shader(const ImDrawList *, const ImDrawCmd *cmd)
 
 void ui_draw_video(ImDrawList *draw, ImVec2 p0, ImVec2 p1, int filter, int width, int lines)
 {
-    ID3D11PixelShader *shader = filter == UI_VIDEO_CRT ? s_crt : filter == UI_VIDEO_TV ? s_tv : NULL;
+    ID3D11PixelShader *shader = filter == UI_VIDEO_CRT ? s_crt
+                                : filter == UI_VIDEO_TV ? s_tv
+                                : filter == UI_VIDEO_SOFT_CRT ? s_soft_crt
+                                : filter == UI_VIDEO_COMPOSITE ? s_composite
+                                : filter == UI_VIDEO_PVM ? s_pvm : NULL;
     if (!s_video_view) {
         return;
     }

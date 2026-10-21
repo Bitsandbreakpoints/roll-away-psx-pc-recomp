@@ -23,6 +23,9 @@ enum InputDevice {
     DEVICE_AUTO = 5                 /* the first XInput controller free, else the keyboard */
 };
 
+/* Settings.video_filter: 0..VIDEO_FILTER_COUNT - 1 (enum UiVideoFilter, ui.h) */
+#define VIDEO_FILTER_COUNT      7
+
 /* Settings.aspect */
 enum AspectMode {
     ASPECT_4_3 = 0,

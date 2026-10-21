@@ -163,7 +163,8 @@ static void graphics_tab(void)
     const char *modes[] = { "Window", "Fullscreen (borderless)" };
     const char *aspects[] = { "4:3 (original)", "Stretched", "16:9 widescreen" };
     const char *filters[] = { "Sharp pixels", "Bilinear (smooth scaling)", "CRT (tube TV)",
-                              "Soft TV (GTU-like)" };
+                              "Soft TV (GTU-like)", "Soft CRT (TV with glow)",
+                              "Composite CRT (colour bleed)", "PVM (sharp scanlines)" };
     char current[64], format[64];
 
     section("DISPLAY");
@@ -204,7 +205,7 @@ static void graphics_tab(void)
         note("3D seen wider, menus and HUD as in 4:3; the movies stay 4:3");
     }
     row("Picture filter");
-    ImGui::Combo("##filter", &s->video_filter, filters, 4);
+    ImGui::Combo("##filter", &s->video_filter, filters, UI_VIDEO_COUNT);
 
     section("3D");
     row("Precise vertices");

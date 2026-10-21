@@ -39,7 +39,11 @@ enum UiVideoFilter {
     UI_VIDEO_SHARP = 0,                 /* the pixels as they are */
     UI_VIDEO_BILINEAR = 1,              /* smooth scaling */
     UI_VIDEO_CRT = 2,                   /* scanlines, mask, curvature */
-    UI_VIDEO_TV = 3                     /* soft TV signal (GTU-like) */
+    UI_VIDEO_TV = 3,                    /* soft TV signal (GTU-like) */
+    UI_VIDEO_SOFT_CRT = 4,              /* a TV: soft signal, scanlines, glow, mask */
+    UI_VIDEO_COMPOSITE = 5,             /* composite cable: colour bleed, scanlines */
+    UI_VIDEO_PVM = 6,                   /* studio monitor: sharp scanlines, grille */
+    UI_VIDEO_COUNT = 7
 };
 
 /* The game's picture: a texture updated every frame from 0xAABBGGRR

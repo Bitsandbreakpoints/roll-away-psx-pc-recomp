@@ -81,8 +81,11 @@ pause menu).
 **Pictures**
 - **Higher internal resolution**, up to 4×.
 - **Precise vertices**: no PS1 "wobble", perspective-correct textures.
-- **Picture filters**: sharp pixels, bilinear, CRT, or a soft-TV filter
-  (GTU-like).
+- **Picture filters**: sharp pixels, bilinear, a soft-TV filter (GTU-like)
+  and four CRT looks: *CRT* (scanlines, mask, curvature), *Soft CRT* (a TV:
+  the whole picture softened, HUD and text too, with soft scanlines and a
+  glow), *Composite CRT* (colour bleed as on a composite cable) and *PVM*
+  (a studio monitor: sharp scanlines).
 - **Widescreen (16:9)**, optional: the 3D world is seen wider and keeps its
   proportions, the menus and the HUD keep theirs too (screens of only 2D,
   and the movies, are shown 4:3).
