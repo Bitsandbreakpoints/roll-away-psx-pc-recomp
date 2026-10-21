@@ -92,6 +92,12 @@ pause menu).
 - **Window or borderless full screen**, any window size, 4:3, 16:9 or
   stretched, vsync.
 
+![The picture filters: the same moment with each one](images/filters.png)
+
+*The same moment with each picture filter, a close-up at 1:1 (4× internal
+resolution, a 1920 × 1440 picture). The game's picture is © its
+respective owners.*
+
 **Sound**
 - **Separate volumes** for the music (the disc's XA tracks) and the sound
   effects.
