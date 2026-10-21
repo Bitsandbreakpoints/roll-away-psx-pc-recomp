@@ -14,6 +14,7 @@
 #include <string.h>
 #include "psx/gte.h"
 #include "psx/pgxp.h"
+#include "psx/log.h"
 
 /* FLAG bits */
 #define FLAG_MAC1_POS           (1u << 30)      /* +3 per MAC: MAC2 29, MAC3 28 */
@@ -30,6 +31,7 @@
 #define WIDESCREEN_NUM          3
 #define WIDESCREEN_DEN          4
 static int s_widescreen;
+int g_gte_trace[6];                     /* (RA_GTE_TRACE) */
 
 /* (the widescreen mode) the screen X positions SXY0..2 as without the
  * squeeze, for NCLIP: the game's culling decisions stay those of the
@@ -600,6 +602,16 @@ static void rtp(int n, int sf, int lm, int last)
     mac0(y);
     g.sxy[2][0] = saturate_flag(x >> 16, -0x400, 0x3FF, FLAG_SX2);
     g.sxy[2][1] = saturate_flag(y >> 16, -0x400, 0x3FF, FLAG_SY2);
+    if (g_gte_trace[4] && g_pgxp_frame >= (uint32_t) g_gte_trace[4]
+        && g_pgxp_frame <= (uint32_t) g_gte_trace[5] && g.sxy[2][0] >= g_gte_trace[0]
+        && g.sxy[2][0] <= g_gte_trace[2] && g.sxy[2][1] >= g_gte_trace[1]
+        && g.sxy[2][1] <= g_gte_trace[3]) {
+        /* (RA_GTE_TRACE=x1,y1,x2,y2,first,last: the inputs of projections landing there) */
+        psx_log("gte %u v %d %d %d rt %d %d %d / %d %d %d / %d %d %d tr %d %d %d -> %d,%d",
+                g_pgxp_frame, v[0], v[1], v[2], g.rt[0][0], g.rt[0][1], g.rt[0][2], g.rt[1][0],
+                g.rt[1][1], g.rt[1][2], g.rt[2][0], g.rt[2][1], g.rt[2][2], g.tr[0], g.tr[1],
+                g.tr[2], g.sxy[2][0], g.sxy[2][1]);
+    }
     {
         /* the same projection without rounding; trusted only where it
          * agrees with the hardware result (no saturation, no overflow) */

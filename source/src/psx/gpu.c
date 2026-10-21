@@ -20,6 +20,7 @@
 #include "psx/gpu.h"
 #include "psx/gpu_hires.h"
 #include "psx/pgxp.h"
+#include "psx/texlod.h"
 #include "psx/gte.h"
 #include "psx/balls.h"
 #include "psx/log.h"
@@ -102,6 +103,12 @@ static int s_widescreen;                /* (the widescreen mode, below) */
 
 static int s_true_color;
 
+void gpu_set_texture_lod(int on)
+{
+    texlod_set_enabled(on);
+    texlod_forget();
+}
+
 void gpu_set_true_color(int on)
 {
     s_true_color = on;
@@ -111,9 +118,10 @@ void gpu_set_true_color(int on)
 void gpu_set_enhancements(int scale, int precise_vertices, int texture_filter)
 {
     g_pgxp_enabled = precise_vertices;
-    g_pgxp_track = precise_vertices || s_widescreen;
-    /* (true colour lives in the high-resolution copy: on also at 1x) */
-    hires_configure(scale > 1 || precise_vertices || s_true_color ? scale : 0);
+    /* (3D is told from 2D by the GTE's stores: for widescreen and distant textures too) */
+    g_pgxp_track = precise_vertices || s_widescreen || texlod_enabled();
+    /* (true colour and distant textures live in the high-resolution copy: on also at 1x) */
+    hires_configure(scale > 1 || precise_vertices || s_true_color || texlod_enabled() ? scale : 0);
     hires_set_texture_filter(precise_vertices && texture_filter);
 }
 
@@ -420,7 +428,7 @@ static int s_widescreen;
 void gpu_set_widescreen(int on)
 {
     s_widescreen = on;
-    g_pgxp_track = on || g_pgxp_enabled;
+    g_pgxp_track = on || g_pgxp_enabled || texlod_enabled();
 }
 
 /*
@@ -549,7 +557,7 @@ static void prim_from_state(Prim *p)
 
 int g_pgxp_stats[3];
 int g_pgxp_debug;                       /* (RA_PGXP_DEBUG) */
-int g_prim_trace[5];                    /* (RA_PRIM_TRACE) */               /* (debugging: vertices, precise, projected) */
+int g_prim_trace[6];                    /* (RA_PRIM_TRACE) */               /* (debugging: vertices, precise, projected) */
 
 /* a vertex for the high-resolution copy: the GTE's float position and
  * depth if this packet word came from it */
@@ -627,7 +635,8 @@ static void command_polygon(const uint32_t *c)
     }
     prim_from_state(&p);
     p.dither = s.dither && (gouraud || (p.textured && !p.raw));
-    if (g_prim_trace[4] && g_pgxp_frame == (uint32_t) g_prim_trace[4]) {
+    if (g_prim_trace[4] && g_pgxp_frame >= (uint32_t) g_prim_trace[4]
+        && g_pgxp_frame <= (uint32_t) (g_prim_trace[5] > g_prim_trace[4] ? g_prim_trace[5] : g_prim_trace[4])) {
         /* (RA_PRIM_TRACE=x1,y1,x2,y2,frame: the polygons drawn there, original pixels) */
         int inside = 0;
         for (int k = 0; k < count; k++) {
@@ -638,15 +647,17 @@ static void command_polygon(const uint32_t *c)
         if (inside) {
             PgxpVertex pv;
             char line[512];
-            int n = snprintf(line, sizeof(line), "prim %02X tex %d gte %d:", op, p.textured,
-                             from_gte(position_word, count));
+            int n = snprintf(line, sizeof(line), "prim %u %02X tex %d gte %d page %d,%d d%d clut %d,%d:",
+                             g_pgxp_frame, op, p.textured, from_gte(position_word, count), p.page_x,
+                             p.page_y, p.depth, p.clut_x, p.clut_y);
             for (int k = 0; k < count && n < (int) sizeof(line) - 40; k++) {
                 int w = position_word[k];
                 int precise = s_cmd_src[w] && pgxp_lookup(s_cmd_src[w], s_cmd[w], &pv);
                 if (precise) {
-                    n += snprintf(line + n, sizeof(line) - (size_t) n, " (%d,%d P %.2f,%.2f z%.0f)",
-                                  v[k].x - s.clip_x1, v[k].y - s.clip_y1, pv.x + s.off_x - s.clip_x1,
-                                  pv.y + s.off_y - s.clip_y1, pv.z);
+                    n += snprintf(line + n, sizeof(line) - (size_t) n,
+                                  " (%d,%d P %.3f,%.3f z%.0f uv %d,%d)", v[k].x - s.clip_x1,
+                                  v[k].y - s.clip_y1, pv.x + s.off_x - s.clip_x1,
+                                  pv.y + s.off_y - s.clip_y1, pv.z, v[k].u, v[k].v);
                 } else {
                     n += snprintf(line + n, sizeof(line) - (size_t) n, " (%d,%d%s)",
                                   v[k].x - s.clip_x1, v[k].y - s.clip_y1,
@@ -707,6 +718,35 @@ static void command_polygon(const uint32_t *c)
                     h[k].r = 255;
                     h[k].g = precise ? 160 : 0;
                     h[k].b = 0;
+                }
+            }
+        }
+        if (p.textured && texlod_enabled() && from_gte(position_word, count)) {
+            /* (detailed distant textures: a small copy drawn with its full-size texture) */
+            if (p.depth == 1) {
+                texlod_note(&p);
+            } else if (p.depth == 0) {
+                int tu[4], tv[4];
+                for (int k = 0; k < count; k++) {
+                    tu[k] = h[k].u;
+                    tv[k] = h[k].v;
+                }
+                int gain[3];
+                if (texlod_upgrade(&p, tu, tv, count, gain)) {
+                    if (p.raw) {
+                        /* (unshaded: shaded now, by the colours' ratio alone) */
+                        p.raw = 0;
+                        for (int k = 0; k < count; k++) {
+                            h[k].r = h[k].g = h[k].b = 128;
+                        }
+                    }
+                    for (int k = 0; k < count; k++) {
+                        h[k].u = tu[k];
+                        h[k].v = tv[k];
+                        h[k].r = h[k].r * gain[0] / 256 > 255 ? 255 : h[k].r * gain[0] / 256;
+                        h[k].g = h[k].g * gain[1] / 256 > 255 ? 255 : h[k].g * gain[1] / 256;
+                        h[k].b = h[k].b * gain[2] / 256 > 255 ? 255 : h[k].b * gain[2] / 256;
+                    }
                 }
             }
         }
@@ -899,6 +939,7 @@ void gpu_fill(int x, int y, int w, int h, uint32_t rgb24)
             *vram_at(x + col, y + row) = color;
         }
     }
+    texlod_vram_changed(x, y, w, h);
     hires_fill(x & (GPU_VRAM_WIDTH - 1), y & (GPU_VRAM_HEIGHT - 1), w, h, color);
 }
 
@@ -909,6 +950,7 @@ void gpu_load_image(int x, int y, int w, int h, const uint16_t *data)
             *vram_at(x + col, y + row) = *data++;
         }
     }
+    texlod_vram_changed(x, y, w, h);
     hires_copy_from_original(x, y, w, h);
 }
 
@@ -923,6 +965,7 @@ void gpu_store_image(int x, int y, int w, int h, uint16_t *data)
 
 void gpu_move_image(int sx, int sy, int dx, int dy, int w, int h)
 {
+    texlod_vram_changed(dx, dy, w, h);
     for (int row = 0; row < h; row++) {
         for (int col = 0; col < w; col++) {
             uint16_t *dst = vram_at(dx + col, dy + row);
@@ -1131,6 +1174,16 @@ const uint32_t *gpu_display_rgba(int *w, int *h)
 
 void gpu_debug_dump(const char *path)
 {
+    {
+        /* (also the raw 16-bit VRAM next to it: <path>.raw) */
+        char raw[260];
+        snprintf(raw, sizeof(raw), "%s.raw", path);
+        FILE *r = fopen(raw, "wb");
+        if (r) {
+            fwrite(g_vram, 2, GPU_VRAM_WIDTH * GPU_VRAM_HEIGHT, r);
+            fclose(r);
+        }
+    }
     FILE *f = fopen(path, "wb");
     uint8_t header[54] = { 'B', 'M' };
     uint32_t size = 54 + GPU_VRAM_WIDTH * GPU_VRAM_HEIGHT * 3;

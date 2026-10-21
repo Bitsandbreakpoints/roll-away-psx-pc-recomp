@@ -53,6 +53,7 @@ typedef struct {
     int internal_scale;                 /* 1..HIRES_MAX_SCALE times 320x240 */
     int aspect;                         /* enum AspectMode */
     int true_color;                     /* 8 bits per colour, no dithering */
+    int detailed_textures;              /* distant surfaces with their full-size textures */
     int video_filter;                   /* enum UiVideoFilter (launcher/ui.h) */
     int precise_vertices;               /* no PS1 "wobble" */
     int texture_filtering;              /* bilinear, 3D surfaces only */

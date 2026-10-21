@@ -353,9 +353,12 @@ void hle_GetDrawEnv(void)
     RETURN(GPR[4]);
 }
 
+int g_rt_flips;                         /* (PutDispEnv calls: the game's frames, for the log) */
+
 void hle_PutDispEnv(void)
 {
     uint32_t env = GPR[4];
+    g_rt_flips++;
     Rect disp = rect_at(env + DI_DISP);
     gpu_set_display(disp.x, disp.y, disp.w, disp.h, RD8(env + DI_ISRGB24));
     for (int i = 0; i < DISPENV_SIZE; i++) {

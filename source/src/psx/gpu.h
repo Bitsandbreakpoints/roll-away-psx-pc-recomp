@@ -76,6 +76,9 @@ void gpu_set_enhancements(int scale, int precise_vertices, int texture_filter);
  * gpu_set_enhancements(). */
 void gpu_set_true_color(int on);
 
+/* Detailed distant textures (texlod.h). Before gpu_set_enhancements(). */
+void gpu_set_texture_lod(int on);
+
 /* A frame that will not be shown (fast forward): the high-resolution copy
  * skips drawing it. */
 void gpu_skip_frame(void);

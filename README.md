@@ -83,6 +83,10 @@ pause menu).
 - **Precise vertices**: no PS1 "wobble", perspective-correct textures.
 - **True colour**: smooth shading and transparency in 8 bits per colour,
   without the console's dithering pattern.
+- **Detailed distant textures**: the game draws blocks further away with
+  small, 16-colour copies of their textures, which look blurred; the port
+  finds the full-size texture each copy was made from and draws that
+  instead (keeping the game's darkening with distance).
 - **Picture filters**: sharp pixels, bilinear, a soft-TV filter (GTU-like)
   and four CRT looks: *CRT* (scanlines, mask, curvature), *Soft CRT* (a TV:
   the whole picture softened, HUD and text too, with soft scanlines and a

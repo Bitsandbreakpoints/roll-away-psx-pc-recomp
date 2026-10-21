@@ -99,7 +99,8 @@ static uint64_t s_sound_start_us;
 static int64_t s_sound_samples;         /* mixed since s_sound_start_us */
 static int16_t s_queue[QUEUE_SAMPLES][2];
 static int s_queue_read, s_queue_count;
-static int s_queue_short;               /* device frames the queue could not fill (the log) */
+static int s_queue_short;
+static int s_last_flips, s_repeated, s_repeat_run, s_longest_repeat;               /* device frames the queue could not fill (the log) */
 void cd_mix_audio(int16_t *out, int frames, int volume_left, int volume_right);
 
 static void game_lock(void)
@@ -315,6 +316,9 @@ void psx_devices_stop(void)
     psx_log("pgxp: %d vertices, %d precise, %d projected by the GTE", g_pgxp_stats[0],
             g_pgxp_stats[1], g_pgxp_stats[2]);
     extern int g_spu_unheard, g_xa_underruns;
+    psx_log("frames: %d vertical blanks, %d without a new picture (longest run %d)",
+            s_vblank_count, s_repeated, s_longest_repeat);
+    s_repeated = s_repeat_run = s_longest_repeat = 0;
     psx_log("sound: %d device frames not filled, %d voices stopped unheard, XA ran dry %d times",
             s_queue_short, g_spu_unheard, g_xa_underruns);
     g_spu_unheard = g_xa_underruns = 0;
@@ -461,6 +465,29 @@ void irq_vblank(void)
     s_last_vblank_us = irq_time_us();
     s_vblank_count++;
     gte_new_frame();
+    {
+        /* (the log: vertical blanks the game showed no new picture in) */
+        extern int g_rt_flips;
+        if (g_rt_flips == s_last_flips) {
+            s_repeated++;
+            s_repeat_run++;
+            s_longest_repeat = s_repeat_run > s_longest_repeat ? s_repeat_run : s_longest_repeat;
+        } else {
+            s_repeat_run = 0;
+        }
+        s_last_flips = g_rt_flips;
+        static int window_repeats, window_longest;
+        window_repeats += g_rt_flips == s_last_flips ? 0 : 0;
+        if (s_repeat_run) {
+            window_repeats++;
+            window_longest = s_repeat_run > window_longest ? s_repeat_run : window_longest;
+        }
+        if (s_vblank_count % 300 == 0 && GetEnvironmentVariableA("RA_FRAME_LOG", NULL, 0)) {
+            psx_log("frames %d-%d: %d without a new picture (longest run %d)",
+                    s_vblank_count - 300, s_vblank_count, window_repeats, window_longest);
+            window_repeats = window_longest = 0;
+        }
+    }
     pad_update();
     cd_tick();
     sound_vblank();

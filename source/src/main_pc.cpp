@@ -280,7 +280,8 @@ static void draw_picture(int w, int h)
 }
 
 extern "C" int g_pgxp_debug;           /* (psx/gpu.c: RA_PGXP_DEBUG) */
-extern "C" int g_prim_trace[5];        /* (psx/gpu.c: RA_PRIM_TRACE) */
+extern "C" int g_prim_trace[6];
+extern "C" int g_gte_trace[6];         /* (psx/gte.c: RA_GTE_TRACE) */        /* (psx/gpu.c: RA_PRIM_TRACE) */
 
 /* The settings that take effect at once while the game runs. */
 static void apply_game_settings(void)
@@ -288,17 +289,24 @@ static void apply_game_settings(void)
     /* (tests: RA_NATIVE=1 draws like the console, for comparisons) */
     if (GetEnvironmentVariableA("RA_NATIVE", NULL, 0)) {
         gpu_set_true_color(0);
+        gpu_set_texture_lod(0);
         gpu_set_enhancements(1, 0, 0);
         gte_set_widescreen(0);
         gpu_set_widescreen(0);
     } else {
         gte_set_widescreen(g_settings_pc.aspect == ASPECT_WIDESCREEN);
         gpu_set_true_color(g_settings_pc.true_color);
+        gpu_set_texture_lod(g_settings_pc.detailed_textures);
         g_pgxp_debug = GetEnvironmentVariableA("RA_PGXP_DEBUG", NULL, 0) != 0;
+        char gtrace[64];
+        if (GetEnvironmentVariableA("RA_GTE_TRACE", gtrace, sizeof(gtrace))) {
+            sscanf(gtrace, "%d,%d,%d,%d,%d,%d", &g_gte_trace[0], &g_gte_trace[1], &g_gte_trace[2],
+                   &g_gte_trace[3], &g_gte_trace[4], &g_gte_trace[5]);
+        }
         char trace[64];
         if (GetEnvironmentVariableA("RA_PRIM_TRACE", trace, sizeof(trace))) {
-            sscanf(trace, "%d,%d,%d,%d,%d", &g_prim_trace[0], &g_prim_trace[1], &g_prim_trace[2],
-                   &g_prim_trace[3], &g_prim_trace[4]);
+            sscanf(trace, "%d,%d,%d,%d,%d,%d", &g_prim_trace[0], &g_prim_trace[1], &g_prim_trace[2],
+                   &g_prim_trace[3], &g_prim_trace[4], &g_prim_trace[5]);
         }
         gpu_set_widescreen(g_settings_pc.aspect == ASPECT_WIDESCREEN);
         gpu_set_enhancements(g_settings_pc.internal_scale, g_settings_pc.precise_vertices,

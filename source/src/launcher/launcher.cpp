@@ -219,6 +219,9 @@ static void graphics_tab(void)
     row("True colour");
     check("##truecolor", &s->true_color);
     note("smooth shading without the console's dithering (8 bits per colour)");
+    row("Detailed distant textures");
+    check("##lodtextures", &s->detailed_textures);
+    note("distant blocks with their full-size textures, not the game's small copies");
     help("The internal resolution is drawn in software on all cores; high values need a fast "
          "processor. Everything here can be changed during the game with F1.");
 }
