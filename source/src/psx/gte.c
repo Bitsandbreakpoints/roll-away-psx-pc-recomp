@@ -38,11 +38,12 @@ void gte_set_widescreen(int on)
 
 /* the positions projected lately: an open hash table of SXY values with
  * the frame they were projected in and, for precise vertices, the float
- * position and depth.  The game copies many projected positions into its
- * packets itself (not with swc2), so the address does not tell where they
- * came from; the value does.  Two projections in one frame that round to
- * the same SXY but lie apart make the value ambiguous: then it is not
- * used (no vertex gets another one's depth). */
+ * position and depth of up to GTE_CANDIDATES vertices that rounded to it in
+ * that frame.  The game copies many projected positions into its packets
+ * itself (not with swc2), so the address does not tell where they came
+ * from; the value does.  Small objects (coins, fruit) have several
+ * vertices on one whole pixel: the GPU chooses among them by depth
+ * (gte_precise_candidates()). */
 #define SEEN_SLOTS              16384   /* (a power of 2) */
 #define SEEN_PROBES             8
 #define SEEN_FRAMES             2
@@ -51,8 +52,9 @@ void gte_set_widescreen(int on)
 
 typedef struct {
     uint32_t value, frame;
-    PgxpVertex precise;
-    uint8_t has_precise, ambiguous;
+    uint8_t count;                      /* precise candidates */
+    uint8_t unknown;                    /* a projection without a precise vertex too */
+    PgxpVertex candidate[GTE_CANDIDATES];
 } Seen;
 
 static Seen s_seen[SEEN_SLOTS];
@@ -86,19 +88,26 @@ static void remember_projected(uint32_t sxy, const PgxpVertex *precise)
             break;
         }
     }
-    if (e->value == sxy && e->frame == s_frame) {
-        /* projected again this frame: the same vertex, or another one? */
-        if (!precise || !e->has_precise || !same_vertex(&e->precise, precise)) {
-            e->ambiguous = 1;
-        }
-    } else {
-        e->ambiguous = 0;
+    if (e->value != sxy || e->frame != s_frame) {
+        e->value = sxy;                 /* (first projection to it this frame) */
+        e->frame = s_frame;
+        e->count = 0;
+        e->unknown = 0;
     }
-    e->value = sxy;
-    e->frame = s_frame;
-    e->has_precise = precise != NULL;
-    if (precise) {
-        e->precise = *precise;
+    if (!precise) {
+        e->unknown = 1;
+        return;
+    }
+    for (int i = 0; i < e->count; i++) {
+        if (same_vertex(&e->candidate[i], precise)) {
+            e->candidate[i] = *precise;     /* (the same vertex projected again) */
+            return;
+        }
+    }
+    if (e->count < GTE_CANDIDATES) {
+        e->candidate[e->count++] = *precise;
+    } else {
+        e->unknown = 1;                 /* (more than we keep) */
     }
 }
 
@@ -122,11 +131,23 @@ int gte_projected_lately(uint32_t sxy)
 int gte_precise_lately(uint32_t sxy, PgxpVertex *v)
 {
     const Seen *e = find_projected(sxy);
-    if (!e || !e->has_precise || e->ambiguous) {
+    if (!e || e->count != 1 || e->unknown) {
         return 0;
     }
-    *v = e->precise;
+    *v = e->candidate[0];
     return 1;
+}
+
+int gte_precise_candidates(uint32_t sxy, PgxpVertex out[GTE_CANDIDATES])
+{
+    const Seen *e = find_projected(sxy);
+    if (!e) {
+        return 0;
+    }
+    for (int i = 0; i < e->count; i++) {
+        out[i] = e->candidate[i];
+    }
+    return e->count;
 }
 #define FLAG_SY2                (1u << 13)
 #define FLAG_IR0                (1u << 12)

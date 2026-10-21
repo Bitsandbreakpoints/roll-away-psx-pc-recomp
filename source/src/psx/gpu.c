@@ -15,6 +15,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <string.h>
 #include "psx/gpu.h"
 #include "psx/gpu_hires.h"
@@ -546,7 +547,8 @@ static void prim_from_state(Prim *p)
     p->blend = s.blend;
 }
 
-int g_pgxp_stats[3];               /* (debugging: vertices, precise, projected) */
+int g_pgxp_stats[3];
+int g_pgxp_debug;                       /* (RA_PGXP_DEBUG) */               /* (debugging: vertices, precise, projected) */
 
 /* a vertex for the high-resolution copy: the GTE's float position and
  * depth if this packet word came from it */
@@ -577,6 +579,88 @@ static void hires_vertex(HiresVertex *h, const Vertex *v, int word_index)
         h->x = pv.x + (float) s.off_x;
         h->y = pv.y + (float) s.off_y;
         h->z = pv.z;
+    }
+}
+
+/*
+ * Corners still without a precise position whose value several vertices
+ * rounded to (a small object's vertices on one pixel): the candidate
+ * nearest in depth to the polygon's other corners is taken - they lie
+ * close together - beginning with the one that agrees best with the rest.
+ */
+static void resolve_precise(HiresVertex *h, const int *position_word, int count)
+{
+    PgxpVertex cand[4][GTE_CANDIDATES];
+    int n[4], open = 0;
+    float z_sum = 0;
+    int z_count = 0;
+    for (int k = 0; k < count; k++) {
+        n[k] = 0;
+        if (h[k].z > 0) {
+            z_sum += h[k].z;
+            z_count++;
+        } else {
+            n[k] = gte_precise_candidates(s_cmd[position_word[k]], cand[k]);
+            open += n[k] > 0;
+        }
+    }
+    if (!open) {
+        return;
+    }
+    if (z_count == 0) {
+        /* no corner known: the first open one's candidate that the others match best */
+        int first = 0;
+        while (n[first] == 0) {
+            first++;
+        }
+        int best = 0;
+        float best_cost = 1e30f;
+        for (int c = 0; c < n[first]; c++) {
+            float cost = 0;
+            for (int k = 0; k < count; k++) {
+                if (k == first || n[k] == 0) {
+                    continue;
+                }
+                float nearest = 1e30f;
+                for (int i = 0; i < n[k]; i++) {
+                    float d = fabsf(cand[k][i].z - cand[first][c].z);
+                    nearest = d < nearest ? d : nearest;
+                }
+                cost += nearest;
+            }
+            if (cost < best_cost) {
+                best_cost = cost;
+                best = c;
+            }
+        }
+        cand[first][0] = cand[first][best];
+        n[first] = 1;
+    }
+    for (int pass = 0; pass < 2; pass++) {
+        for (int k = 0; k < count; k++) {
+            /* (pass 0: the seeded corner, pass 1: the others) */
+            if (n[k] == 0 || (pass == 0 && z_count > 0) || (pass == 0 && n[k] != 1)) {
+                continue;
+            }
+            int best = 0;
+            if (z_count > 0) {
+                float ref = z_sum / (float) z_count, best_d = 1e30f;
+                for (int i = 0; i < n[k]; i++) {
+                    float d = fabsf(cand[k][i].z - ref);
+                    if (d < best_d) {
+                        best_d = d;
+                        best = i;
+                    }
+                }
+            }
+            h[k].x = cand[k][best].x + (float) s.off_x;
+            h[k].y = cand[k][best].y + (float) s.off_y;
+            h[k].z = cand[k][best].z;
+            z_sum += h[k].z;
+            z_count++;
+            n[k] = 0;
+            g_pgxp_stats[1]++;
+        }
     }
 }
 
@@ -646,6 +730,26 @@ static void command_polygon(const uint32_t *c)
         }
         for (int k = 0; k < count; k++) {
             hires_vertex(&h[k], &v[k], position_word[k]);
+        }
+        if (g_pgxp_enabled) {
+            resolve_precise(h, position_word, count);
+        }
+        if (g_pgxp_debug) {
+            /* (RA_PGXP_DEBUG: 3D polygons with a corner not precise in red) */
+            int projected = 0, precise = 0;
+            for (int k = 0; k < count; k++) {
+                projected += gte_projected_lately(s_cmd[position_word[k]]);
+                precise += h[k].z > 0;
+            }
+            if (projected == count && precise < count) {
+                p.textured = 0;
+                p.semi = 0;
+                for (int k = 0; k < count; k++) {
+                    h[k].r = 255;
+                    h[k].g = precise ? 160 : 0;
+                    h[k].b = 0;
+                }
+            }
         }
         if (hires_triangle_drawn(&v[0], &v[1], &v[2], &h[0], &h[1], &h[2])) {
             hires_triangle(&p, &e, &h[0], &h[1], &h[2]);

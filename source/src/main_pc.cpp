@@ -279,6 +279,8 @@ static void draw_picture(int w, int h)
     }
 }
 
+extern "C" int g_pgxp_debug;           /* (psx/gpu.c: RA_PGXP_DEBUG) */
+
 /* The settings that take effect at once while the game runs. */
 static void apply_game_settings(void)
 {
@@ -291,6 +293,7 @@ static void apply_game_settings(void)
     } else {
         gte_set_widescreen(g_settings_pc.aspect == ASPECT_WIDESCREEN);
         gpu_set_true_color(g_settings_pc.true_color);
+        g_pgxp_debug = GetEnvironmentVariableA("RA_PGXP_DEBUG", NULL, 0) != 0;
         gpu_set_widescreen(g_settings_pc.aspect == ASPECT_WIDESCREEN);
         gpu_set_enhancements(g_settings_pc.internal_scale, g_settings_pc.precise_vertices,
                              g_settings_pc.texture_filtering);
