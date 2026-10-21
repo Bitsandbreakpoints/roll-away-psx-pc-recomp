@@ -31,31 +31,39 @@
 #define WIDESCREEN_DEN          4
 static int s_widescreen;
 
+/* (the widescreen mode) the screen X positions SXY0..2 as without the
+ * squeeze, for NCLIP: the game's culling decisions stay those of the
+ * console - tiny polygons whose whole-pixel winding would otherwise come
+ * out differently once squeezed, such as the inside of the apple's stem
+ * hollow, stay dropped */
+static int16_t s_plain_x[3];
+static int s_plain_valid[3];
+
+static void push_plain_x(int16_t x, int valid)
+{
+    s_plain_x[0] = s_plain_x[1];
+    s_plain_x[1] = s_plain_x[2];
+    s_plain_x[2] = x;
+    s_plain_valid[0] = s_plain_valid[1];
+    s_plain_valid[1] = s_plain_valid[2];
+    s_plain_valid[2] = valid;
+}
+
 void gte_set_widescreen(int on)
 {
     s_widescreen = on;
+    memset(s_plain_valid, 0, sizeof(s_plain_valid));
 }
 
 /* the positions projected lately: an open hash table of SXY values with
- * the frame they were projected in and, for precise vertices, the float
- * position and depth of up to GTE_CANDIDATES vertices that rounded to it in
- * that frame.  The game copies many projected positions into its packets
- * itself (not with swc2), so the address does not tell where they came
- * from; the value does (as a fallback for what runtime.c's tracking of
- * mfc2 -> sw misses), but only where one vertex rounded to it: small
- * objects (coins, fruit) have several vertices on one whole pixel. */
+ * the frame they were projected in (the widescreen mode tells 3D polygons
+ * from 2D by it, gpu.c) */
 #define SEEN_SLOTS              16384   /* (a power of 2) */
 #define SEEN_PROBES             8
-#define GTE_CANDIDATES          4
 #define SEEN_FRAMES             2
-#define SAME_XY                 0.05f   /* pixels */
-#define SAME_Z                  0.005f  /* of the depth */
 
 typedef struct {
     uint32_t value, frame;
-    uint8_t count;                      /* precise candidates */
-    uint8_t unknown;                    /* a projection without a precise vertex too */
-    PgxpVertex candidate[GTE_CANDIDATES];
 } Seen;
 
 static Seen s_seen[SEEN_SLOTS];
@@ -64,6 +72,7 @@ static uint32_t s_frame = SEEN_FRAMES + 1;
 void gte_new_frame(void)
 {
     s_frame++;
+    g_pgxp_frame++;
 }
 
 static uint32_t seen_slot(uint32_t sxy)
@@ -71,72 +80,31 @@ static uint32_t seen_slot(uint32_t sxy)
     return (sxy * 2654435761u) >> 18;   /* (14 bits: SEEN_SLOTS) */
 }
 
-static int same_vertex(const PgxpVertex *a, const PgxpVertex *b)
-{
-    float dz = a->z - b->z;
-    return fabsf(a->x - b->x) <= SAME_XY && fabsf(a->y - b->y) <= SAME_XY
-           && fabsf(dz) <= SAME_Z * a->z;
-}
-
-static void remember_projected(uint32_t sxy, const PgxpVertex *precise)
+static void remember_projected(uint32_t sxy)
 {
     uint32_t slot = seen_slot(sxy);
-    Seen *e = &s_seen[slot];
     for (int i = 0; i < SEEN_PROBES; i++) {
         Seen *k = &s_seen[(slot + (uint32_t) i) & (SEEN_SLOTS - 1)];
         if (k->value == sxy || k->frame + SEEN_FRAMES < s_frame) {
-            e = k;
-            break;
-        }
-    }
-    if (e->value != sxy || e->frame != s_frame) {
-        e->value = sxy;                 /* (first projection to it this frame) */
-        e->frame = s_frame;
-        e->count = 0;
-        e->unknown = 0;
-    }
-    if (!precise) {
-        e->unknown = 1;
-        return;
-    }
-    for (int i = 0; i < e->count; i++) {
-        if (same_vertex(&e->candidate[i], precise)) {
-            e->candidate[i] = *precise;     /* (the same vertex projected again) */
+            k->value = sxy;
+            k->frame = s_frame;
             return;
         }
     }
-    if (e->count < GTE_CANDIDATES) {
-        e->candidate[e->count++] = *precise;
-    } else {
-        e->unknown = 1;                 /* (more than we keep) */
-    }
+    s_seen[slot].value = sxy;           /* (full: the first slot is reused) */
+    s_seen[slot].frame = s_frame;
 }
 
-static const Seen *find_projected(uint32_t sxy)
+int gte_projected_lately(uint32_t sxy)
 {
     uint32_t slot = seen_slot(sxy);
     for (int i = 0; i < SEEN_PROBES; i++) {
         const Seen *k = &s_seen[(slot + (uint32_t) i) & (SEEN_SLOTS - 1)];
         if (k->value == sxy && k->frame + SEEN_FRAMES >= s_frame) {
-            return k;
+            return 1;
         }
     }
-    return NULL;
-}
-
-int gte_projected_lately(uint32_t sxy)
-{
-    return find_projected(sxy) != NULL;
-}
-
-int gte_precise_lately(uint32_t sxy, PgxpVertex *v)
-{
-    const Seen *e = find_projected(sxy);
-    if (!e || e->count != 1 || e->unknown) {
-        return 0;
-    }
-    *v = e->candidate[0];
-    return 1;
+    return 0;
 }
 
 #define FLAG_SY2                (1u << 13)
@@ -192,6 +160,7 @@ static uint8_t s_unr_table[0x101];
 void gte_reset(void)
 {
     memset(&g, 0, sizeof(g));
+    memset(s_plain_valid, 0, sizeof(s_plain_valid));
     for (int i = 0; i < 0x101; i++) {
         int u = (0x40000 / (i + 0x100) + 1) / 2 - 0x101;
         s_unr_table[i] = (uint8_t) (u < 0 ? 0 : u);
@@ -293,12 +262,14 @@ void gte_mtc2(int reg, uint32_t value)
         g.sxy[reg - GTE_SXY0][0] = lo16(value);
         g.sxy[reg - GTE_SXY0][1] = hi16(value);
         s_precise_valid[reg - GTE_SXY0] = 0;
+        s_plain_valid[reg - GTE_SXY0] = 0;
         break;
     case GTE_SXYP:
         memcpy(g.sxy[0], g.sxy[1], sizeof(g.sxy[0]) * 2);
         g.sxy[2][0] = lo16(value);
         g.sxy[2][1] = hi16(value);
         push_precise(NULL, 0);
+        push_plain_x(0, 0);
         break;
     case GTE_SZ0: case GTE_SZ1: case GTE_SZ2: case GTE_SZ3:
         g.sz[reg - GTE_SZ0] = (uint16_t) value;
@@ -411,8 +382,23 @@ void gte_ctc2(int reg, uint32_t value)
 void gte_lwc2(int reg, const void *address)
 {
     uint32_t value;
+    PgxpVertex v;
     memcpy(&value, address, 4);
     gte_mtc2(reg, value);
+    /* a screen position loaded back whose precise vertex is known (stored
+     * with swc2/sw before): the GTE has it again, for NCLIP, and in the
+     * widescreen mode its whole-pixel X as without the squeeze */
+    if ((g_pgxp_enabled || g_pgxp_track) && reg >= GTE_SXY0 && reg <= GTE_SXYP
+        && pgxp_lookup(address, value, &v)) {
+        int n = reg == GTE_SXYP ? 2 : reg - GTE_SXY0;
+        s_precise[n] = v;
+        s_precise_valid[n] = 1;
+        if (s_widescreen) {
+            double ofx = g.ofx / 65536.0;
+            s_plain_x[n] = (int16_t) floor(ofx + (v.x - ofx) * WIDESCREEN_DEN / WIDESCREEN_NUM);
+            s_plain_valid[n] = 1;
+        }
+    }
 }
 
 void gte_swc2(int reg, void *address)
@@ -432,25 +418,28 @@ void gte_swc2(int reg, void *address)
 /*
  * NCLIP: twice the signed area of the screen triangle SXY0..2, which the
  * game tests to drop polygons facing away.  With precise vertices the
- * float positions decide the sign (as PGXP culling does in emulators): a
- * thin sliver whose whole-pixel corners fall on one line has no area on
- * the console and is dropped, but drawn at a higher resolution it fills a
- * crack between its neighbours (e.g. a line across the cloth).
+ * float positions may only drop more: a polygon whose whole-pixel corners
+ * face the camera but whose true corners face away (a back face at an
+ * outline, which drawn precisely would stick out as a sliver).  They never
+ * bring back what the console drops: in Roll Away that showed the inside
+ * of the apple's stem hollow and the rims of the coins as stripes.
  */
 static int64_t nclip_area(void)
 {
-    int64_t area = (int64_t) g.sxy[0][0] * g.sxy[1][1] + (int64_t) g.sxy[1][0] * g.sxy[2][1]
-                   + (int64_t) g.sxy[2][0] * g.sxy[0][1] - (int64_t) g.sxy[0][0] * g.sxy[2][1]
-                   - (int64_t) g.sxy[1][0] * g.sxy[0][1] - (int64_t) g.sxy[2][0] * g.sxy[1][1];
+    int64_t x0 = g.sxy[0][0], x1 = g.sxy[1][0], x2 = g.sxy[2][0];
+    if (s_widescreen && s_plain_valid[0] && s_plain_valid[1] && s_plain_valid[2]) {
+        x0 = s_plain_x[0];              /* (the console's whole pixels, see s_plain_x) */
+        x1 = s_plain_x[1];
+        x2 = s_plain_x[2];
+    }
+    int64_t area = x0 * g.sxy[1][1] + x1 * g.sxy[2][1] + x2 * g.sxy[0][1] - x0 * g.sxy[2][1]
+                   - x1 * g.sxy[0][1] - x2 * g.sxy[1][1];
     if (!g_pgxp_enabled || !s_precise_valid[0] || !s_precise_valid[1] || !s_precise_valid[2]) {
         return area;
     }
     const PgxpVertex *v = s_precise;
     double precise = ((double) v[1].x - v[0].x) * ((double) v[2].y - v[0].y)
                      - ((double) v[2].x - v[0].x) * ((double) v[1].y - v[0].y);
-    if (precise > 0 && area <= 0) {
-        return 1;                       /* (only the sign changes) */
-    }
     if (precise < 0 && area >= 0) {
         return -1;
     }
@@ -601,6 +590,8 @@ static void rtp(int n, int sf, int lm, int last)
     memcpy(g.sxy[0], g.sxy[1], sizeof(g.sxy[0]) * 2);
     int64_t x = (int64_t) q * g.ir[1];
     if (s_widescreen) {
+        int64_t plain = (x + g.ofx) >> 16;
+        push_plain_x((int16_t) (plain < -0x400 ? -0x400 : plain > 0x3FF ? 0x3FF : plain), 1);
         x = x * WIDESCREEN_NUM / WIDESCREEN_DEN;
     }
     x += g.ofx;
@@ -625,8 +616,7 @@ static void rtp(int n, int sf, int lm, int last)
         }
         push_precise(&pv, valid);
         if (g_pgxp_track) {
-            remember_projected((uint16_t) g.sxy[2][0] | (uint32_t) (uint16_t) g.sxy[2][1] << 16,
-                               valid ? &pv : NULL);
+            remember_projected((uint16_t) g.sxy[2][0] | (uint32_t) (uint16_t) g.sxy[2][1] << 16);
         }
     }
     if (last) {

@@ -27,6 +27,9 @@ extern int g_pgxp_enabled;
  * widescreen mode tells 3D from 2D by them). */
 extern int g_pgxp_track;
 
+/* vertical blanks so far (pgxp_store notes when) */
+extern uint32_t g_pgxp_frame;
+
 void pgxp_store(const void *address, uint32_t value, const PgxpVertex *v);
 
 /* TRUE and *v if `address` was last stored from the GTE with `value`. */

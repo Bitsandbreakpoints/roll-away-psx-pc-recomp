@@ -548,7 +548,8 @@ static void prim_from_state(Prim *p)
 }
 
 int g_pgxp_stats[3];
-int g_pgxp_debug;                       /* (RA_PGXP_DEBUG) */               /* (debugging: vertices, precise, projected) */
+int g_pgxp_debug;                       /* (RA_PGXP_DEBUG) */
+int g_prim_trace[5];                    /* (RA_PRIM_TRACE) */               /* (debugging: vertices, precise, projected) */
 
 /* a vertex for the high-resolution copy: the GTE's float position and
  * depth if this packet word came from it */
@@ -569,12 +570,6 @@ static void hires_vertex(HiresVertex *h, const Vertex *v, int word_index)
     }
     if (g_pgxp_enabled && s_cmd_src[word_index]
         && pgxp_lookup(s_cmd_src[word_index], s_cmd[word_index], &pv)) {
-        g_pgxp_stats[1]++;
-        h->x = pv.x + (float) s.off_x;
-        h->y = pv.y + (float) s.off_y;
-        h->z = pv.z;
-    } else if (g_pgxp_enabled && gte_precise_lately(s_cmd[word_index], &pv)) {
-        /* (a projected position the game copied into the packet itself) */
         g_pgxp_stats[1]++;
         h->x = pv.x + (float) s.off_x;
         h->y = pv.y + (float) s.off_y;
@@ -632,6 +627,35 @@ static void command_polygon(const uint32_t *c)
     }
     prim_from_state(&p);
     p.dither = s.dither && (gouraud || (p.textured && !p.raw));
+    if (g_prim_trace[4] && g_pgxp_frame == (uint32_t) g_prim_trace[4]) {
+        /* (RA_PRIM_TRACE=x1,y1,x2,y2,frame: the polygons drawn there, original pixels) */
+        int inside = 0;
+        for (int k = 0; k < count; k++) {
+            int x = v[k].x - s.clip_x1, y = v[k].y - s.clip_y1;
+            inside |= x >= g_prim_trace[0] && x <= g_prim_trace[2] && y >= g_prim_trace[1]
+                      && y <= g_prim_trace[3];
+        }
+        if (inside) {
+            PgxpVertex pv;
+            char line[512];
+            int n = snprintf(line, sizeof(line), "prim %02X tex %d gte %d:", op, p.textured,
+                             from_gte(position_word, count));
+            for (int k = 0; k < count && n < (int) sizeof(line) - 40; k++) {
+                int w = position_word[k];
+                int precise = s_cmd_src[w] && pgxp_lookup(s_cmd_src[w], s_cmd[w], &pv);
+                if (precise) {
+                    n += snprintf(line + n, sizeof(line) - (size_t) n, " (%d,%d P %.2f,%.2f z%.0f)",
+                                  v[k].x - s.clip_x1, v[k].y - s.clip_y1, pv.x + s.off_x - s.clip_x1,
+                                  pv.y + s.off_y - s.clip_y1, pv.z);
+                } else {
+                    n += snprintf(line + n, sizeof(line) - (size_t) n, " (%d,%d%s)",
+                                  v[k].x - s.clip_x1, v[k].y - s.clip_y1,
+                                  gte_projected_lately(s_cmd[w]) ? " g" : "");
+                }
+            }
+            psx_log("%s", line);
+        }
+    }
     squeeze_polygon(v, count, position_word);
     draw_triangle(&p, &v[0], &v[1], &v[2]);
     if (quad) {
@@ -648,6 +672,26 @@ static void command_polygon(const uint32_t *c)
         }
         for (int k = 0; k < count; k++) {
             hires_vertex(&h[k], &v[k], position_word[k]);
+        }
+        if (g_pgxp_debug) {
+            /* (RA_PGXP_DEBUG: small polygons whose corners' depths differ a lot) */
+            float zmin = 1e30f, zmax = 0, xmin = 1e30f, xmax = -1e30f, ymin = 1e30f, ymax = -1e30f;
+            int all = 1;
+            for (int k = 0; k < count; k++) {
+                all &= h[k].z > 0;
+                zmin = h[k].z < zmin ? h[k].z : zmin;
+                zmax = h[k].z > zmax ? h[k].z : zmax;
+                xmin = h[k].x < xmin ? h[k].x : xmin;
+                xmax = h[k].x > xmax ? h[k].x : xmax;
+                ymin = h[k].y < ymin ? h[k].y : ymin;
+                ymax = h[k].y > ymax ? h[k].y : ymax;
+            }
+            static int logged;
+            if (all && xmax - xmin < 24 && ymax - ymin < 24 && zmax > zmin * 1.5f && logged < 40) {
+                logged++;
+                psx_log("pgxp: odd depths %.0f..%.0f at %.0f,%.0f (%d corners) frame %u", zmin,
+                        zmax, xmin, ymin, count, g_pgxp_frame);
+            }
         }
         if (g_pgxp_debug) {
             /* (RA_PGXP_DEBUG: 3D polygons with a corner not precise in red) */

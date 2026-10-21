@@ -308,7 +308,10 @@ void psx_devices_stop(void)
     threads_lock(s_lock);
     s_sound_running = 0;
     s_queue_read = s_queue_count = 0;
-    extern int g_pgxp_stats[3];
+    extern int g_pgxp_stats[3], g_pgxp_age_stats[8];
+    psx_log("pgxp ages: %d %d %d %d %d %d %d %d+", g_pgxp_age_stats[0], g_pgxp_age_stats[1],
+            g_pgxp_age_stats[2], g_pgxp_age_stats[3], g_pgxp_age_stats[4], g_pgxp_age_stats[5],
+            g_pgxp_age_stats[6], g_pgxp_age_stats[7]);
     psx_log("pgxp: %d vertices, %d precise, %d projected by the GTE", g_pgxp_stats[0],
             g_pgxp_stats[1], g_pgxp_stats[2]);
     extern int g_spu_unheard, g_xa_underruns;

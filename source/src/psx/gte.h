@@ -80,10 +80,6 @@ void gte_set_widescreen(int on);
  * the game copied the positions into its packets itself. */
 int gte_projected_lately(uint32_t sxy);
 
-/* The same with precise vertices: TRUE and the float position and depth
- * if `sxy` was projected lately by one vertex only (no other projection
- * in that frame rounded to it from elsewhere). */
-int gte_precise_lately(uint32_t sxy, PgxpVertex *v);
 
 /* The precise vertex of SXY0..2 / SXYP (registers 12..15), if there is
  * one (mfc2 of a screen position: runtime.c tracks it through the CPU). */
