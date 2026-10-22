@@ -47,10 +47,12 @@ enum UiVideoFilter {
 };
 
 /* The game's picture: a texture updated every frame from 0xAABBGGRR
- * pixels, drawn into p0..p1 with a filter (enum UiVideoFilter); `width`
- * and `lines` are its size in the console's pixels (what the CRT and TV
- * filters work in). */
+ * pixels, drawn into p0..p1 with a filter (enum UiVideoFilter) at
+ * `strength` 0..100 (the TV and CRT filters: 0 is the plain picture);
+ * `width` and `lines` are its size in the console's pixels (what the CRT
+ * and TV filters work in). */
 void ui_video_update(const uint32_t *rgba, int w, int h);
-void ui_draw_video(ImDrawList *draw, ImVec2 p0, ImVec2 p1, int filter, int width, int lines);
+void ui_draw_video(ImDrawList *draw, ImVec2 p0, ImVec2 p1, int filter, int strength, int width,
+                   int lines);
 
 #endif /* LAUNCHER_UI_H */

@@ -269,7 +269,8 @@ static void draw_picture(int w, int h)
         }
     }
     ui_draw_video(ImGui::GetBackgroundDrawList(), ImVec2(x0, y0), ImVec2(x1, y1),
-                  g_settings_pc.video_filter, gpu_display_width(), gpu_display_lines());
+                  g_settings_pc.video_filter, g_settings_pc.filter_strength, gpu_display_width(),
+                  gpu_display_lines());
     if (!gpu_display_wide()) {
         /* (widescreen, a picture of only 2D: squeezed into the middle 3/4) */
         float bar = (x1 - x0) / 8;

@@ -33,6 +33,7 @@ static ID3D11PixelShader *s_pvm;          /* UI_VIDEO_PVM */
 static float s_crt_width;
 static ID3D11Buffer *s_crt_constants;
 static float s_crt_lines;
+static float s_crt_strength;
 
 /* CRT look for the game picture (ui_draw_video): the picture's own lines
  * as scanlines whose width grows with brightness, an aperture grille
@@ -46,7 +47,7 @@ static float s_crt_lines;
 static const char TV_SHADER[] = R"(
 cbuffer Crt : register(b0)
 {
-    float4 crt;                         /* x: lines, y: pixels across (the console's) */
+    float4 crt;                         /* x: lines, y: pixels across (the console's), z: strength 0..1 */
 };
 struct PS_INPUT
 {
@@ -77,14 +78,15 @@ float4 main(PS_INPUT input) : SV_Target
             total += w;
         }
     }
-    return float4(sqrt(sum / total), 1.0) * input.col;
+    float3 plain = texture0.Sample(sampler0, input.uv).rgb;
+    return float4(sqrt(lerp(plain * plain, sum / total, crt.z)), 1.0) * input.col;
 }
 )";
 
 static const char CRT_SHADER[] = R"(
 cbuffer Crt : register(b0)
 {
-    float4 crt;                         /* x: lines of the picture */
+    float4 crt;                         /* x: lines of the picture, z: strength 0..1 */
 };
 struct PS_INPUT
 {
@@ -110,7 +112,7 @@ float beam(float distance, float3 colour)
 float4 main(PS_INPUT input) : SV_Target
 {
     float2 centre = input.uv - 0.5;
-    float2 uv = input.uv + centre * dot(centre, centre) * 0.07;
+    float2 uv = input.uv + centre * dot(centre, centre) * 0.07 * crt.z;
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
         return float4(0.0, 0.0, 0.0, 1.0);
     float lines = crt.x;
@@ -127,6 +129,7 @@ float4 main(PS_INPUT input) : SV_Target
     colour *= mask;
     float corner = 16.0 * uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y);
     colour *= pow(saturate(corner), 0.18);
+    colour = lerp(fetch(uv), colour, crt.z);
     return float4(sqrt(saturate(colour)), 1.0) * input.col;
 }
 )";
@@ -140,7 +143,7 @@ float4 main(PS_INPUT input) : SV_Target
 static const char SOFT_CRT_SHADER[] = R"(
 cbuffer Crt : register(b0)
 {
-    float4 crt;                         /* x: lines, y: pixels across (the console's) */
+    float4 crt;                         /* x: lines, y: pixels across (the console's), z: strength 0..1 */
 };
 struct PS_INPUT
 {
@@ -186,7 +189,7 @@ float beam(float distance, float3 colour)
 float4 main(PS_INPUT input) : SV_Target
 {
     float2 centre = input.uv - 0.5;
-    float2 uv = input.uv + centre * dot(centre, centre) * CURVE;
+    float2 uv = input.uv + centre * dot(centre, centre) * CURVE * crt.z;
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
         return float4(0.0, 0.0, 0.0, 1.0);
     float lines = crt.x;
@@ -217,6 +220,7 @@ float4 main(PS_INPUT input) : SV_Target
     colour *= mask;
     float corner = 16.0 * uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y);
     colour *= pow(saturate(corner), 0.15);
+    colour = lerp(fetch(uv), colour, crt.z);
     return float4(sqrt(saturate(colour)), 1.0) * input.col;
 }
 )";
@@ -228,7 +232,7 @@ float4 main(PS_INPUT input) : SV_Target
 static const char COMPOSITE_SHADER[] = R"(
 cbuffer Crt : register(b0)
 {
-    float4 crt;                         /* x: lines, y: pixels across (the console's) */
+    float4 crt;                         /* x: lines, y: pixels across (the console's), z: strength 0..1 */
 };
 struct PS_INPUT
 {
@@ -279,7 +283,7 @@ float3 line_colour(float u, float v)
 float4 main(PS_INPUT input) : SV_Target
 {
     float2 centre = input.uv - 0.5;
-    float2 uv = input.uv + centre * dot(centre, centre) * CURVE;
+    float2 uv = input.uv + centre * dot(centre, centre) * CURVE * crt.z;
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
         return float4(0.0, 0.0, 0.0, 1.0);
     float lines = crt.x;
@@ -295,6 +299,8 @@ float4 main(PS_INPUT input) : SV_Target
     colour *= 1.38;
     float corner = 16.0 * uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y);
     colour *= pow(saturate(corner), 0.15);
+    float3 plain = texture0.Sample(sampler0, uv).rgb;
+    colour = lerp(plain * plain, colour, crt.z);
     return float4(sqrt(saturate(colour)), 1.0) * input.col;
 }
 )";
@@ -304,7 +310,7 @@ float4 main(PS_INPUT input) : SV_Target
 static const char PVM_SHADER[] = R"(
 cbuffer Crt : register(b0)
 {
-    float4 crt;                         /* x: lines, y: pixels across (the console's) */
+    float4 crt;                         /* x: lines, y: pixels across (the console's), z: strength 0..1 */
 };
 struct PS_INPUT
 {
@@ -349,6 +355,8 @@ float4 main(PS_INPUT input) : SV_Target
     int column = (int) fmod(input.pos.x, 3.0);
     if (column == 0) mask.r = 1.15; else if (column == 1) mask.g = 1.15; else mask.b = 1.15;
     colour *= mask;
+    float3 plain = texture0.Sample(sampler0, input.uv).rgb;
+    colour = lerp(plain * plain, colour, crt.z);
     return float4(sqrt(saturate(colour)), 1.0) * input.col;
 }
 )";
@@ -686,7 +694,7 @@ static void use_shader(const ImDrawList *, const ImDrawCmd *cmd)
     ID3D11DeviceContext *context = (ID3D11DeviceContext *) platform_d3d_context();
     D3D11_MAPPED_SUBRESOURCE mapped;
     if (SUCCEEDED(context->Map(s_crt_constants, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
-        float constants[4] = { s_crt_lines, s_crt_width, 0, 0 };
+        float constants[4] = { s_crt_lines, s_crt_width, s_crt_strength, 0 };
         memcpy(mapped.pData, constants, sizeof(constants));
         context->Unmap(s_crt_constants, 0);
     }
@@ -695,7 +703,8 @@ static void use_shader(const ImDrawList *, const ImDrawCmd *cmd)
     context->PSSetSamplers(0, 1, &s_trilinear);
 }
 
-void ui_draw_video(ImDrawList *draw, ImVec2 p0, ImVec2 p1, int filter, int width, int lines)
+void ui_draw_video(ImDrawList *draw, ImVec2 p0, ImVec2 p1, int filter, int strength, int width,
+                   int lines)
 {
     ID3D11PixelShader *shader = filter == UI_VIDEO_CRT ? s_crt
                                 : filter == UI_VIDEO_TV ? s_tv
@@ -708,6 +717,7 @@ void ui_draw_video(ImDrawList *draw, ImVec2 p0, ImVec2 p1, int filter, int width
     if (shader && s_crt_constants) {
         s_crt_lines = (float) (lines > 0 ? lines : 240);
         s_crt_width = (float) (width > 0 ? width : 320);
+        s_crt_strength = (float) (strength < 0 ? 0 : strength > 100 ? 100 : strength) / 100.0f;
         draw->AddCallback(use_shader, shader);
     } else {
         draw->AddCallback(filter == UI_VIDEO_SHARP ? use_point : use_linear, NULL);

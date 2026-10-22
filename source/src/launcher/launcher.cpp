@@ -206,6 +206,11 @@ static void graphics_tab(void)
     }
     row("Picture filter");
     ImGui::Combo("##filter", &s->video_filter, filters, UI_VIDEO_COUNT);
+    ImGui::BeginDisabled(s->video_filter == UI_VIDEO_SHARP || s->video_filter == UI_VIDEO_BILINEAR);
+    row("Filter strength");
+    ImGui::SliderInt("##strength", &s->filter_strength, 0, 100, "%d %%");
+    note("TV and CRT filters: lower blends in the plain picture");
+    ImGui::EndDisabled();
 
     section("3D");
     row("Precise vertices");

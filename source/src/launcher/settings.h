@@ -55,6 +55,7 @@ typedef struct {
     int true_color;                     /* 8 bits per colour, no dithering */
     int detailed_textures;              /* distant surfaces with their full-size textures */
     int video_filter;                   /* enum UiVideoFilter (launcher/ui.h) */
+    int filter_strength;                /* 0..100: how much of the TV/CRT filter shows */
     int precise_vertices;               /* no PS1 "wobble" */
     int texture_filtering;              /* bilinear, 3D surfaces only */
 
