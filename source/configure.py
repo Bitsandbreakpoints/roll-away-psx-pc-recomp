@@ -3,15 +3,19 @@
 
     python configure.py [--debug] [--disc <your Roll Away disc image>]
 
-1. Builds build/tools/discdump.exe and copies the game's executable
-   (SLUS_007.24) out of your disc image into build/disc/.
-2. Recompiles it to C (recomp/recomp.py -> build/gen/).
+1. Builds build/tools/discdump.exe and copies the game's executable out
+   of your disc images into build/disc/: SLUS_007.24 of Roll Away (USA),
+   SCES_010.00 of Kula World (Europe), SCPS_100.64 of KulaQuest (Japan).
+2. Recompiles each to C (recomp/recomp.py -> build/gen/), one module per
+   version; build/gen/modules.c lists the modules of this build.
 3. Writes build.ninja for the program itself.
 
-The disc image (.chd, .cue/.bin or .iso) is found with --disc, the RA_DISC
-environment variable, or by looking for "Roll Away*" images in the
-project folder and the one above it.  Nothing from the disc is kept
-outside build/.
+At least one version is needed; the program then runs the versions whose
+code it contains.  Disc images (.chd, .cue/.bin or .iso) are found with
+--disc (any number of times), the RA_DISC environment variable, or by
+looking for "Roll Away*", "Kula World*" and "KulaQuest*" images in the
+project folder, the one above it and orig/.  Nothing from the discs is
+kept outside build/.
 """
 import glob
 import os
@@ -36,9 +40,14 @@ CHDR_DIR = 'third_party/libchdr'
 CHDR_SOURCES = [CHDR_DIR + '/unity.c', CHDR_DIR + '/src/libchdr_codec_avhuff.c']
 CHDR_CFLAGS = ('-O2 -w -std=gnu11 ' + ' '.join('-I' + CHDR_DIR + '/' + d for d in (
     'include', 'deps/lzma-26.02/include', 'deps/miniz-3.1.2', 'deps/zstd-1.5.7')))
-# the executables on the disc and their recompiler configurations
-MODULES = [('/SLUS_007.24;1', 'SLUS_007.24', 'recomp/config/main.cfg')]
-DISC_PATTERNS = ['Roll*Away*.chd', 'Roll*Away*.cue', 'Roll*Away*.iso', 'Roll*Away*.bin']
+# the versions: executable on the disc, recompiler configuration, title,
+# disc image names
+MODULES = [
+    ('SLUS_007.24', 'recomp/config/main.cfg', 'Roll Away (USA)', ['Roll*Away*']),
+    ('SCES_010.00', 'recomp/config/eu.cfg', 'Kula World (Europe)', ['Kula*World*']),     # PAL
+    ('SCPS_100.64', 'recomp/config/jp.cfg', 'KulaQuest (Japan)', ['Kula*Quest*']),
+]
+DISC_EXTENSIONS = ['.chd', '.cue', '.iso', '.bin']
 # files that resources.rc builds into the exe
 RESOURCE_FILES = ['assets/launcher/background.png', 'assets/icon/roll_away.ico', 'src/resources.h']
 LIBS = ['d3d11', 'dxgi', 'd3dcompiler_47', 'xinput', 'ole32', 'user32', 'gdi32', 'shell32',
@@ -49,22 +58,20 @@ def rel(path):
     return os.path.relpath(path, HERE).replace('\\', '/')
 
 
-def find_disc():
-    if '--disc' in sys.argv:
-        return sys.argv[sys.argv.index('--disc') + 1]
+def candidate_discs(patterns):
+    """disc images that may hold a version: given ones first, then by name"""
+    found = [sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == '--disc']
     if os.environ.get('RA_DISC'):
-        return os.environ['RA_DISC']
-    saved = os.path.join(HERE, 'build', 'disc_path.txt')
-    if os.path.exists(saved):
+        found.append(os.environ['RA_DISC'])
+    for saved in glob.glob(os.path.join(HERE, 'build', 'disc_path*.txt')):
         path = open(saved, encoding='utf-8').read().strip()
         if os.path.exists(path):
-            return path
+            found.append(path)
     for folder in (HERE, os.path.dirname(HERE), os.path.join(HERE, 'orig')):
-        for pattern in DISC_PATTERNS:
-            found = sorted(glob.glob(os.path.join(folder, pattern)))
-            if found:
-                return found[0]
-    return None
+        for pattern in patterns:
+            for ext in DISC_EXTENSIONS:
+                found += sorted(glob.glob(os.path.join(folder, pattern + ext)))
+    return list(dict.fromkeys(found))
 
 
 def run(cmd):
@@ -96,27 +103,57 @@ def build_discdump():
     return exe
 
 
+def module_name(cfg):
+    return [l.split()[1] for l in open(os.path.join(HERE, cfg)) if l.startswith('name ')][0]
+
+
 def extract_and_recompile():
+    """The versions this build contains: [(exe name, cfg, title)]"""
     disc_dir = os.path.join(HERE, 'build', 'disc')
-    have = all(os.path.exists(os.path.join(disc_dir, name)) for _, name, _ in MODULES)
-    disc = find_disc()
-    if not have or disc and '--disc' in sys.argv:
-        if not disc:
-            sys.exit("Your Roll Away (USA) disc image is needed to build (the code is made "
-                     "from its executable):\n    build.bat --disc \"C:/Games/Roll Away (USA).chd\"")
-        print(f'disc: {disc}')
-        os.makedirs(disc_dir, exist_ok=True)
-        exe = build_discdump()
-        run([exe, disc, disc_dir] + [path for path, _, _ in MODULES])
-        open(os.path.join(HERE, 'build', 'disc_path.txt'), 'w', encoding='utf-8').write(disc)
-    for _, name, cfg in MODULES:
-        run([sys.executable, 'recomp/recomp.py', 'build/disc/' + name, cfg, 'build/gen'])
+    os.makedirs(disc_dir, exist_ok=True)
+    present = []
+    for name, cfg, title, patterns in MODULES:
+        target = os.path.join(disc_dir, name)
+        if not os.path.exists(target) or '--disc' in sys.argv:
+            exe = build_discdump()
+            for disc in candidate_discs(patterns):
+                result = subprocess.run([exe, disc, disc_dir, '/' + name + ';1'], cwd=HERE,
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if result.returncode == 0:
+                    print(f'{title}: {disc}')
+                    open(os.path.join(HERE, 'build', f'disc_path_{module_name(cfg)}.txt'), 'w',
+                         encoding='utf-8').write(disc)
+                    break
+        if os.path.exists(target):
+            present.append((name, cfg, title))
+        else:
+            print(f'{title}: no disc image found (that version is left out)')
+    if not present:
+        sys.exit('A disc image of the game is needed to build (the code is made from its '
+                 'executable):\n    build.bat --disc "C:/Games/Roll Away (USA).chd"\n'
+                 '(Roll Away (USA), Kula World (Europe) or KulaQuest (Japan)).')
     gen = []
-    for _, _, cfg in MODULES:
-        mod = [l.split()[1] for l in open(os.path.join(HERE, cfg)) if l.startswith('name ')][0]
-        files = open(os.path.join(HERE, 'build', 'gen', mod + '_files.txt')).read().split()
+    for name, cfg, _ in present:
+        run([sys.executable, 'recomp/recomp.py', 'build/disc/' + name, cfg, 'build/gen'])
+        files = open(os.path.join(HERE, 'build', 'gen', module_name(cfg) + '_files.txt')).read().split()
         gen += ['build/gen/' + f for f in files]
-    return gen
+    # the list of modules for the runtime
+    text = ['/* GENERATED by configure.py: the versions whose code this build contains */',
+            '#include "runtime/runtime.h"', '']
+    for _, cfg, _ in present:
+        mod = module_name(cfg)
+        text += [f'extern const RtFunction g_{mod}_functions[];',
+                 f'extern const int g_{mod}_function_count;', f'extern const char g_{mod}_sha1[];']
+    text += ['', 'const RtModule g_rt_modules[] = {']
+    for name, cfg, title in present:
+        mod = module_name(cfg)
+        pal = int(title.endswith('(Europe)'))
+        text.append(f'    {{ "{name}", "{title}", g_{mod}_functions, &g_{mod}_function_count, g_{mod}_sha1, {pal} }},')
+    text += ['};', f'const int g_rt_module_count = {len(present)};', '']
+    path = os.path.join(HERE, 'build', 'gen', 'modules.c')
+    if not os.path.exists(path) or open(path).read() != '\n'.join(text):
+        open(path, 'w', newline='\n').write('\n'.join(text))
+    return gen + ['build/gen/modules.c']
 
 
 def main():
@@ -166,7 +203,7 @@ def main():
         '  description = CONFIGURE (recompiling the executables)',
         '',
         'build build.ninja: configure | configure.py recomp/recomp.py recomp/mips.py recomp/psxexe.py '
-        + ' '.join(cfg for _, _, cfg in MODULES),
+        + ' '.join(cfg for _, cfg, _, _ in MODULES),
         '',
     ]
     objs = []

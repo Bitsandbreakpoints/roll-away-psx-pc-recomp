@@ -6,10 +6,11 @@
 The zip holds roll_away.exe, the player's README (README.txt) and the
 licences of the third-party code built into the exe.  It never holds
 anything from the game's disc: before packing, the exe is searched for
-every 64-byte block (that is not mostly one repeated value) of the disc's
-files - the executable in build/disc/ and, if they are there, the
-files in orig/files/ (except the streamed movies and XA music, sound and
-video sectors far larger than the exe) - at every offset.  Any hit stops the packing.
+every 64-byte block (that is not mostly one repeated value) of the discs'
+files - the executables of the three releases in build/disc/ and, if they
+are there, the files of each disc in orig/files/ (USA), orig/files_eu/ and
+orig/files_jp/ (except the streamed movies and XA music, sound and video
+sectors far larger than the exe) - at every offset.  Any hit stops the packing.
 (The exe contains the executable's code translated to x86, but none of
 its bytes: data and tables are read from the disc when the game runs.)
 Settings and logs from test runs never go in (only the files listed here
@@ -29,7 +30,7 @@ FOLDER = 'Roll Away PC'
 BLOCK = 64
 MAX_SCANNED_FILE = 4 * 1024 * 1024  # (the STR movies and XA music: streamed audio/video)
 MIN_DISTINCT_BYTES = 12        # skip blocks that are mostly one value (zeros, padding)
-DISC_DIRS = ['build/disc', 'orig/files']
+DISC_DIRS = ['build/disc', 'orig/files', 'orig/files_eu', 'orig/files_jp']
 
 # Public tables that both the game (its own inflate code) and the port (the
 # decompressors in libchdr) contain: the DEFLATE length and distance bases

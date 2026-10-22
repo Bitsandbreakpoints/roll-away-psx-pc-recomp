@@ -1,8 +1,8 @@
 /*
  * disc.cpp - reading the player's disc image: raw 2352-byte sectors (.bin,
  * also through a .cue), 2048-byte ones (.iso), and compressed MAME CHD
- * images (libchdr); ISO9660 directories; the check that it is Roll Away
- * (USA) (game_check.c compares its executables with the recompiled ones).
+ * images (libchdr); ISO9660 directories; the check that it is a version of
+ * the game (game_check.c compares its executable with the recompiled ones).
  */
 #include <windows.h>
 #include <stdio.h>
@@ -16,7 +16,6 @@
 
 #define RAW_SECTOR              2352
 #define PVD_LBA                 16
-#define GAME_EXE_NAME           "SLUS_007.24"
 
 enum ImageKind {
     KIND_NONE,
@@ -352,12 +351,7 @@ int disc_check(const char *path, char *detail, int detail_size)
         snprintf(detail, detail_size, "Not a PS1 disc (SYSTEM.CNF is missing).");
         return DISC_WRONG_GAME;
     }
-    cnf[DISC_SECTOR_DATA] = '\0';
-    if (!strstr(cnf, GAME_EXE_NAME)) {
-        snprintf(detail, detail_size, "This is not Roll Away (USA).");
-        return DISC_WRONG_GAME;
-    }
-    /* the port's code was recompiled from the executables of one release */
+    /* which version, and is the port's code made from its executable? */
     return disc_check_executables(detail, detail_size);
 }
 

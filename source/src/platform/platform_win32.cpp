@@ -388,11 +388,24 @@ void platform_clear(uint32_t rgb)
     s_context->ClearRenderTargetView(s_back_buffer, colour);
 }
 
-/* Sleeps until the next 1/60 s tick (timer for most of it, then a short spin). */
+static int s_refresh_hz = PLATFORM_REFRESH_HZ;
+
+void platform_set_refresh_hz(int hz)
+{
+    s_refresh_hz = hz > 0 ? hz : PLATFORM_REFRESH_HZ;
+}
+
+int platform_refresh_hz(void)
+{
+    return s_refresh_hz;
+}
+
+/* Sleeps until the next 1/60 s (PAL: 1/50 s) tick (timer for most of it,
+ * then a short spin). */
 static void wait_next_frame(void)
 {
     LARGE_INTEGER now;
-    LONGLONG period = s_freq.QuadPart / PLATFORM_REFRESH_HZ;
+    LONGLONG period = s_freq.QuadPart / s_refresh_hz;
 
     s_next_frame.QuadPart += period;
     QueryPerformanceCounter(&now);
@@ -436,7 +449,9 @@ void platform_present(void)
             s_swap_chain->Present(0, 0);
         }
     } else {
-        s_swap_chain->Present(s_config.vsync ? 1 : 0, 0);
+        /* (vsync only at 60 Hz: a 50 Hz PAL game waiting for a 60 Hz monitor
+         * as well would show every other refresh; the timer paces it) */
+        s_swap_chain->Present(s_config.vsync && s_refresh_hz == PLATFORM_REFRESH_HZ ? 1 : 0, 0);
         wait_next_frame();
     }
     s_frames++;
@@ -472,7 +487,7 @@ int platform_open_file_dialog(char *path, int size)
     ofn.lpstrFilter = L"PS1 disc image (*.bin, *.cue, *.chd, *.iso)\0*.bin;*.cue;*.chd;*.iso\0All files\0*.*\0";
     ofn.lpstrFile = file;
     ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrTitle = L"Choose your Roll Away (USA) disc";
+    ofn.lpstrTitle = L"Choose your Roll Away, Kula World or KulaQuest disc";
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
     if (!GetOpenFileNameW(&ofn)) {
         return 0;

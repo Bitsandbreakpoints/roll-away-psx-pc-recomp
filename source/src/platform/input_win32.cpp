@@ -72,7 +72,7 @@ void input_poll(void)
         s_pad_prev[i] = s_pad_bits[i];
         s_pad_bits[i] = 0;
         /* polling a missing pad is slow: check unconnected ones once a second */
-        if (!s_get_state || (!s_connected[i] && s_poll_count % PLATFORM_REFRESH_HZ != i)) {
+        if (!s_get_state || (!s_connected[i] && s_poll_count % platform_refresh_hz() != i)) {
             continue;
         }
         memset(&state, 0, sizeof(state));

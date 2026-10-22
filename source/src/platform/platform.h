@@ -13,6 +13,7 @@ extern "C" {
 #endif
 
 #define PLATFORM_REFRESH_HZ     60      /* NTSC: the game runs one step per frame */
+#define PLATFORM_REFRESH_PAL_HZ 50      /* PAL (Kula World, Europe) */
 #define PLATFORM_SPLASH_MIN_W   720     /* smallest splash, at 96 DPI */
 #define PLATFORM_SPLASH_MIN_H   432
 
@@ -52,6 +53,11 @@ void platform_present(void);
 /* Fast forward: platform_present() shows only every 4th frame and does
  * not wait. */
 void platform_set_fast_forward(int on);
+
+/* The pace platform_present() keeps: PLATFORM_REFRESH_HZ (NTSC, the
+ * default) or PLATFORM_REFRESH_PAL_HZ. */
+void platform_set_refresh_hz(int hz);
+int platform_refresh_hz(void);
 
 /* Frames per second over the last second. */
 double platform_fps(void);

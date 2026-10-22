@@ -19,8 +19,8 @@ extern "C" {
 enum DiscStatus {
     DISC_NONE = 0,                  /* nothing chosen */
     DISC_UNREADABLE,                /* not a disc image we can read */
-    DISC_WRONG_GAME,                /* a PS1 disc, but not Roll Away (USA) */
-    DISC_OTHER_DUMP,                /* Roll Away, but other executables than the port's */
+    DISC_WRONG_GAME,                /* a PS1 disc, but not a version of the game */
+    DISC_OTHER_DUMP,                /* the game, but not the release the port's code is made from */
     DISC_OK                         /* the executables match the recompiled code */
 };
 
@@ -38,8 +38,9 @@ int disc_read_raw(uint32_t lba, uint8_t out[DISC_RAW_SECTOR]);
 /* Finds a file ("\\DATA\\GAME.PAK;1", case and ";1" optional). */
 int disc_find_file(const char *path, uint32_t *lba, uint32_t *size);
 
-/* Opens the image and checks that it is Roll Away (USA) with the
- * executables the port was recompiled from.  `detail` gets a short
+/* Opens the image and checks that it is a version of the game (Roll Away
+ * (USA), Kula World (Europe), KulaQuest (Japan)) with the executable the
+ * port was recompiled from.  `detail` gets a short
  * explanation (UTF-8). */
 int disc_check(const char *path, char *detail, int detail_size);
 

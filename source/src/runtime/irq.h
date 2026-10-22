@@ -27,6 +27,10 @@ uint64_t irq_time_us(void);
  * controllers answer, the callbacks run. */
 void irq_vblank(void);
 
+/* The video standard of the running version: PAL (50 Hz) or NTSC (60). */
+void irq_set_pal(int pal);
+int irq_pal(void);
+
 /* The game waits for the hardware (e.g. the CD): lets the sound run for a
  * moment and checks for interrupts at the next chance. */
 void irq_idle(void);

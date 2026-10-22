@@ -4,21 +4,31 @@
 
 # Roll Away PC port
 
-A native Windows version of the PlayStation game **Roll Away**
-(Psygnosis, 1998; developed by Game Design Sweden AB). The game's own code
-is recompiled to run natively on Windows, with no emulator and no BIOS, and
-the port adds sharper graphics, a pause menu and a number of quality-of-life
-improvements.
+A native Windows version of the PlayStation game **Roll Away** (Psygnosis,
+1998), known in Europe as **Kula World** and in Japan as **KulaQuest**
+(Sony Computer Entertainment; developed by Game Design Sweden AB). All three
+releases are supported. The game's own code is recompiled to run natively on
+Windows, with no emulator and no BIOS, and the port adds sharper graphics, a
+pause menu and a number of quality-of-life improvements.
 
 **You need your own copy of the game.** The port reads the graphics, sound,
 music, movies, text and data from a disc image that you make from your own
 original disc.
 
-<p align="center">
-  <img src="images/cover.jpg" alt="Roll Away (USA), PlayStation, SLUS-00724 - front cover" width="320">
-  <br>
-  <em>The game this port needs: Roll Away (USA), SLUS-00724. Cover © its respective owners.</em>
-</p>
+<table align="center">
+  <tr>
+    <td align="center"><img src="images/cover.jpg" alt="Roll Away (USA), PlayStation, SLUS-00724, front cover" height="250"></td>
+    <td align="center"><img src="images/cover-eu.jpg" alt="Kula World (Europe), PlayStation, SCES-01000, front cover" height="250"></td>
+    <td align="center"><img src="images/cover-jp.jpg" alt="KulaQuest (Japan), PlayStation, SCPS-10064, front cover" height="250"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Roll Away</strong><br>USA, SLUS-00724</td>
+    <td align="center"><strong>Kula World</strong><br>Europe, SCES-01000</td>
+    <td align="center"><strong>KulaQuest</strong><br>Japan, SCPS-10064</td>
+  </tr>
+</table>
+
+<p align="center"><em>The releases this port plays: any one of them is enough. Covers © their respective owners.</em></p>
 
 ## Download
 
@@ -31,7 +41,8 @@ All releases are on the [Releases page](https://github.com/Bitsandbreakpoints/ro
 3. Click **CHOOSE DISC** and pick your disc image, or drop it on the window.
    `.bin`/`.cue` and `.chd` work (an `.iso` works too, but without music
    and movies: it holds no XA sectors). The launcher checks that the image
-   is *Roll Away (USA)*.
+   is *Roll Away (USA)*, *Kula World (Europe)* or *KulaQuest (Japan)*, and
+   which of them.
 4. Click **PLAY**.
 
 ![The launcher](images/launcher.png)
@@ -42,24 +53,29 @@ All releases are on the [Releases page](https://github.com/Bitsandbreakpoints/ro
 
 ![The title screen](images/title.png)
 
+![Kula World (Europe): the title screen](images/title-eu.png)
+
+![KulaQuest (Japan): the title screen](images/title-jp.png)
+
 ![A stage](images/level.png)
 
 ![The pause menu](images/pause-menu.png)
 
-*In-game pictures: Roll Away running in this port (4× internal resolution,
-soft-TV filter). The game's pictures shown here are © their respective
-owners.*
+*In-game pictures: Roll Away, Kula World and KulaQuest running in this port
+(4× internal resolution; the first ones with the soft-TV filter). The game's
+pictures shown here are © their respective owners.*
 
 ## Disclaimer
 
 - **You must own the game.** To play, you need a dump (disc image) of your
-  own original *Roll Away (USA)* disc. This project does not provide, and
+  own original *Roll Away (USA)*, *Kula World (Europe)* or *KulaQuest
+  (Japan)* disc. This project does not provide, and
   will not help you find, game files.
 - **This repository contains no game files:** no code, graphics, sound,
   music, movies, text or data files from the game, and no BIOS. It holds
   this README, the third-party licence list, the source code of the port
   (see [Source code](#source-code)) and pictures: our banner, the launcher
-  (our own, with a background drawn by a script), plus the box cover and
+  (our own, with a background drawn by a script), plus the box covers and
   in-game pictures, which are © their respective owners and shown only to
   identify the game.
 - **No game assets are distributed.** The release contains the port's own
@@ -69,9 +85,9 @@ owners.*
   it holds none of the game's files or data (before every release, the
   program is searched for every part of the disc's files, and none may be
   found).
-- *Roll Away* is a trademark of its owner. This is a non-commercial fan
-  project and is not affiliated with or endorsed by Psygnosis, Game Design
-  Sweden or Sony.
+- *Roll Away*, *Kula World* and *KulaQuest* are trademarks of their
+  owners. This is a non-commercial fan project and is not affiliated with
+  or endorsed by Psygnosis, Game Design Sweden or Sony.
 
 ## Improvements over the original
 
@@ -178,10 +194,20 @@ PlayStation is written anew in the port.
 is the format DuckStation and other emulators use, so a card from an
 emulator can be copied in (rename it).
 
-**Which version of the game?** *Roll Away (USA)*, SLUS-00724. The port is
-recompiled from that release's code, so the launcher checks the game's
-program on the disc; other releases (such as the European *Kula World*)
-are not supported.
+**Which version of the game?** Any of the three: *Roll Away (USA)*,
+SLUS-00724; *Kula World (Europe)*, SCES-01000; *KulaQuest (Japan)*,
+SCPS-10064. Each release's code is recompiled on its own and the program
+holds all three; the launcher sees which disc you chose and runs its code.
+Other releases or modified discs are not supported.
+
+**Does Kula World run at 50 Hz?** Yes. The European release is a PAL game
+and runs at the PAL rate, as on a European PlayStation; the others run at
+60 Hz. *KulaQuest* is Japanese throughout, and confirms with Circle, as on
+a Japanese console.
+
+**Can the versions share a memory card?** Yes. Like a real card,
+`roll_away_card1.mcd` holds the saves of each release side by side; each
+release sees only its own.
 
 **Why is there no music with my .iso?** The music and the movies are XA
 sectors, which an `.iso` image does not keep. Use a `.bin`/`.cue` or
@@ -202,10 +228,11 @@ output, plus the build scripts, the tests and the open-source libraries it
 uses.
 
 The game's code is not in the repository. It is recompiled when you build,
-from the program on **your own disc**:
+from the program on **your own disc** (one or more of the three releases;
+the build holds the code of those it was given):
 
 ```bat
-source\build.bat --disc "D:\Games\Roll Away (USA).chd"
+source\build.bat --disc "D:\Games\Roll Away (USA).chd" --disc "D:\Games\Kula World (Europe).chd"
 ```
 
 The first build downloads the compiler (llvm-mingw) and ninja; Python 3 is

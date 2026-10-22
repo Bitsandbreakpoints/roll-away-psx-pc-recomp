@@ -8,6 +8,7 @@
  * starts the next recompiled executable.  Unknown functions are logged.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "runtime/recomp.h"
 #include "runtime/runtime.h"
@@ -558,9 +559,25 @@ static void call_c0(uint32_t f)
     }
 }
 
+/* (debugging: RA_BIOS_TRACE=<n> logs the first n calls, with a0..a3 and ra) */
+static void trace_call(uint32_t table, uint32_t function)
+{
+    static int limit = -1;
+    if (limit < 0) {
+        const char *e = getenv("RA_BIOS_TRACE");
+        limit = e ? atoi(e) : 0;
+    }
+    if (limit > 0 && !(table == BIOS_A0 && function <= 0x2E)) {   /* (not the C library) */
+        limit--;
+        psx_log("BIOS %02Xh:%02Xh(%08X, %08X, %08X, %08X) ra %08X", table, function, GPR[4],
+                GPR[5], GPR[6], GPR[7], GPR[31]);
+    }
+}
+
 void bios_call(uint32_t table, uint32_t function)
 {
     function &= 0xFF;
+    trace_call(table, function);
     if (table == BIOS_A0) {
         call_a0(function);
     } else if (table == BIOS_B0) {

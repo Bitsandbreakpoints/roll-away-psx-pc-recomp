@@ -410,6 +410,45 @@ void hle_SetDrawEnv(void)
     }
 }
 
+/* The primitive setters below are in SYS.OBJ of the older LIBGPU (Psy-Q
+ * 4.2, Kula World (Europe)); later ones have them elsewhere, translated. */
+
+/* DR_MODE: tag + draw mode + texture window (none: 0); tw the 5th argument */
+void hle_SetDrawMode(void)
+{
+    uint32_t p = GPR[4], tw = RD32(GPR[29] + 16);
+    WR32(p, (RD32(p) & LINK_MASK) | 2u << 24);
+    WR32(p + 4, mode_command((int) GPR[5], (int) GPR[6], (int) GPR[7]));
+    WR32(p + 8, tw ? window_command(rect_at(tw)) : 0);
+}
+
+/* DR_TWIN: tag + texture window */
+void hle_SetTexWindow(void)
+{
+    uint32_t p = GPR[4], tw = GPR[5];
+    WR32(p, (RD32(p) & LINK_MASK) | 2u << 24);
+    WR32(p + 4, tw ? window_command(rect_at(tw)) : 0);
+    WR32(p + 8, 0);
+}
+
+/* DR_STP: tag + mask setting (set the mask bit when drawing) */
+void hle_SetDrawStp(void)
+{
+    uint32_t p = GPR[4];
+    WR32(p, (RD32(p) & LINK_MASK) | 2u << 24);
+    WR32(p + 4, GP0_MASK | (GPR[5] ? 1u : 0));
+    WR32(p + 8, 0);
+}
+
+/* DR_PRIO: tag + mask setting (check the mask bit, set it) */
+void hle_SetPriority(void)
+{
+    uint32_t p = GPR[4];
+    WR32(p, (RD32(p) & LINK_MASK) | 2u << 24);
+    WR32(p + 4, GP0_MASK | (GPR[5] ? 2u : 0) | (GPR[6] ? 1u : 0));
+    WR32(p + 8, 0);
+}
+
 void hle__GPU_ResetCallback(void)
 {
     RETURN(0);

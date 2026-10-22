@@ -466,6 +466,8 @@ static int game_frame(void)
 {
     int w, h;
 
+    platform_set_refresh_hz(psx_video_hz());    /* (PAL: 50 Hz) */
+
     if (!platform_pump()) {
         s_quit = 1;
         return 0;
@@ -547,7 +549,11 @@ static void show_game_window(void)
 
 static void run_game(void)
 {
-    if (!disc_open(g_settings_pc.disc_path)) {
+    /* (tests: RA_DISC=<image> plays that disc, the settings left as they are) */
+    static char test_disc[MAX_PATH];
+    const char *disc = GetEnvironmentVariableA("RA_DISC", test_disc, sizeof(test_disc))
+                       ? test_disc : g_settings_pc.disc_path;
+    if (!disc_open(disc)) {
         platform_message(GAME_TITLE, "The disc cannot be read.");
         return;
     }

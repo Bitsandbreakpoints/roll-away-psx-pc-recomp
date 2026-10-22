@@ -2,7 +2,8 @@
  * runtime.c - runs the recompiled PS1 executables.
  *
  * The disc boots like on a PS1: SYSTEM.CNF names the executable
- * (SLUS_007.24, the whole game; no overlays).  The executable is loaded
+ * (SLUS_007.24, SCES_010.00 or SCPS_100.64: the whole game of each
+ * version; no overlays).  The executable is loaded
  * from the player's disc into PS1 memory (its data, tables and text all come from there) and its
  * recompiled code (build/gen/, made from the same file) is run from the
  * entry point on the emulated registers.
@@ -10,6 +11,7 @@
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "runtime/runtime.h"
 #include "runtime/system.h"
@@ -25,16 +27,6 @@
 Cpu g_cpu;
 uint32_t g_rt_ram_write_limit = RT_RAM_SIZE;
 const RtModule *g_rt_module;
-
-/* the executables on the disc whose code is in the port */
-extern const RtFunction g_main_functions[];
-extern const int g_main_function_count;
-extern const char g_main_sha1[];
-
-static const RtModule MODULES[] = {
-    { "SLUS_007.24", g_main_functions, &g_main_function_count, g_main_sha1 },
-};
-#define MODULE_COUNT            (int) (sizeof(MODULES) / sizeof(MODULES[0]))
 
 /* PS-X EXE header */
 #define EXE_HEADER_SIZE         0x800
@@ -315,9 +307,9 @@ static int load_executable(const char *path, uint32_t stack, uint32_t stack_size
     const RtModule *module = NULL;
 
     base_name(path, name, sizeof(name));
-    for (int i = 0; i < MODULE_COUNT; i++) {
-        if (strcmp(MODULES[i].disc_name, name) == 0) {
-            module = &MODULES[i];
+    for (int i = 0; i < g_rt_module_count; i++) {
+        if (strcmp(g_rt_modules[i].disc_name, name) == 0) {
+            module = &g_rt_modules[i];
         }
     }
     if (!module) {
@@ -365,6 +357,7 @@ static int load_executable(const char *path, uint32_t stack, uint32_t stack_size
     GPR[28] = get32(file + EXE_GP);
     GPR[31] = 0;
     g_rt_module = module;
+    irq_set_pal(module->pal);
     s_entry = get32(file + EXE_PC);
     psx_log("loaded %s: %08X..%08X, entry %08X, sp %08X", name, text, text + text_size, s_entry,
             GPR[29]);
@@ -377,7 +370,7 @@ void rt_load_exec(const char *path, uint32_t stack, uint32_t stack_size)
     longjmp(s_exec, 1);
 }
 
-/* the first executable: BOOT = cdrom:\SLUS_007.24;1 in SYSTEM.CNF */
+/* the first executable, e.g. BOOT = cdrom:SLUS_007.24;1 in SYSTEM.CNF */
 static int boot_path(char *out, int size)
 {
     char cnf[DISC_SECTOR_DATA + 1];
@@ -444,6 +437,11 @@ void psx_run_game(PsxFrameHook hook)
     s_running = 0;
     psx_devices_stop();
     psx_log("game stopped");
+}
+
+int psx_video_hz(void)
+{
+    return irq_pal() ? 50 : 60;
 }
 
 void psx_vblank(void)

@@ -66,6 +66,9 @@ const char *psx_fatal_message(void);
 /* One vertical blank: the frame hook. */
 void psx_vblank(void);
 
+/* The running version's frame rate: 60 (NTSC) or 50 (PAL). */
+int psx_video_hz(void);
+
 /* (runtime) the emulated devices: power-on state / the game has stopped */
 void psx_devices_reset(void);
 void psx_devices_stop(void);

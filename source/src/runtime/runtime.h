@@ -14,11 +14,18 @@ extern "C" {
 
 /* A PS1 executable whose code is recompiled into the port. */
 typedef struct {
-    const char *disc_name;              /* e.g. "MAIN.EXE" */
+    const char *disc_name;              /* e.g. "SLUS_007.24" */
+    const char *title;                  /* the version, e.g. "Roll Away (USA)" */
     const RtFunction *functions;        /* sorted by address */
     const int *function_count;
     const char *sha1;                   /* of the whole file (the code was made from it) */
+    int pal;                            /* a PAL release: 50 Hz */
 } RtModule;
+
+/* the versions whose code this build contains (build/gen/modules.c,
+ * written by configure.py) */
+extern const RtModule g_rt_modules[];
+extern const int g_rt_module_count;
 
 /* the executable whose code runs */
 extern const RtModule *g_rt_module;

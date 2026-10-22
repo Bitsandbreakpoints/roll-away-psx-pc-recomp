@@ -27,8 +27,16 @@
 #include "psx/gte.h"
 #include "psx/log.h"
 
-#define FRAME_US                16683           /* NTSC: 59.94 Hz */
-#define HBLANKS_PER_FRAME       263
+/* the video standard: NTSC 59.94 Hz, 263 lines; PAL 49.76 Hz, 314 lines
+ * (irq_set_pal(): Kula World (Europe)) */
+#define FRAME_US_NTSC           16683
+#define HBLANKS_NTSC            263
+#define FRAME_US_PAL            20096
+#define HBLANKS_PAL             314
+static int s_frame_us = FRAME_US_NTSC;
+static int s_hblanks_per_frame = HBLANKS_NTSC;
+#define FRAME_US                s_frame_us
+#define HBLANKS_PER_FRAME       s_hblanks_per_frame
 #define POLL_INTERVAL           256             /* backward jumps between checks */
 #define VSYNC_CALLBACKS         8
 #define DMA_CHANNELS            8
@@ -454,6 +462,17 @@ uint32_t irq_set_draw_callback(uint32_t func)
 }
 
 /* ---- the vertical blank ---------------------------------------------------- */
+
+void irq_set_pal(int pal)
+{
+    s_frame_us = pal ? FRAME_US_PAL : FRAME_US_NTSC;
+    s_hblanks_per_frame = pal ? HBLANKS_PAL : HBLANKS_NTSC;
+}
+
+int irq_pal(void)
+{
+    return s_frame_us == FRAME_US_PAL;
+}
 
 void irq_vblank(void)
 {
