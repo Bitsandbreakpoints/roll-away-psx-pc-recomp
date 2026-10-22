@@ -12,7 +12,8 @@
 #include "disc/sha1.h"
 #include "runtime/runtime.h"
 
-/* every version of the game (a build may contain fewer: configure.py) */
+/* every version of the game, in the order of enum DiscVersion (a build
+ * may contain fewer: configure.py) */
 static const struct {
     const char *exe, *title;
 } VERSIONS[] = {
@@ -22,6 +23,13 @@ static const struct {
 };
 
 #define MAX_EXE_SIZE            0x200000
+
+static int s_version = DISC_VERSION_NONE;      /* (an index of VERSIONS) */
+
+int disc_version(void)
+{
+    return s_version;
+}
 
 static int file_sha1(const char *path, char hex[41])
 {
@@ -77,6 +85,7 @@ static int boot_name(char *out, int size)
 int disc_check_executables(char *detail, int detail_size)
 {
     char name[64], path[80], hex[41];
+    s_version = DISC_VERSION_NONE;
     if (!boot_name(name, sizeof(name))) {
         snprintf(detail, detail_size, "Not a PS1 game disc (SYSTEM.CNF cannot be read).");
         return DISC_WRONG_GAME;
@@ -85,6 +94,7 @@ int disc_check_executables(char *detail, int detail_size)
     for (size_t i = 0; i < sizeof(VERSIONS) / sizeof(VERSIONS[0]); i++) {
         if (strcmp(VERSIONS[i].exe, name) == 0) {
             title = VERSIONS[i].title;
+            s_version = (int) i;
         }
     }
     const RtModule *module = NULL;

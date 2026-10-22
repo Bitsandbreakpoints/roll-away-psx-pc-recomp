@@ -148,8 +148,9 @@ respective owners.*
 - **No loading pauses**: files are read at once (music and movies still
   stream in real time, as on the console).
 - **Launcher**: a resizable splash window that remembers its size; choose
-  the disc and have it checked, change every setting, with mouse, keyboard
-  or controller.
+  the disc and have it checked (the title then shows the release: Roll
+  Away, Kula World or KulaQuest), change every setting, with mouse,
+  keyboard or controller.
 - **Controls**: keyboard or XInput controllers (Xbox and compatible), two
   players, every button remappable, automatic mapping.
 - **Disc images**: `.bin`/`.cue`, `.chd` (compressed) and `.iso`.

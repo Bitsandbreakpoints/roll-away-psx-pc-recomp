@@ -48,6 +48,16 @@ int disc_check(const char *path, char *detail, int detail_size);
  * executables against the recompiled code; a DiscStatus */
 int disc_check_executables(char *detail, int detail_size);
 
+/* (game_check.c) the release disc_check_executables() last recognised
+ * (also when its executable is not the port's): a DiscVersion */
+enum DiscVersion {
+    DISC_VERSION_NONE = -1,
+    DISC_VERSION_USA,               /* Roll Away */
+    DISC_VERSION_EUROPE,            /* Kula World */
+    DISC_VERSION_JAPAN              /* KulaQuest */
+};
+int disc_version(void);
+
 /* A file of the opened disc, whole; FALSE if it is missing or larger than `size`. */
 int disc_read_file(const char *path, void *out, uint32_t size, uint32_t *length);
 

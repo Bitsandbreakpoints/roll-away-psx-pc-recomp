@@ -89,9 +89,25 @@ static int disc_playable(void)
     return s_disc_status == DISC_OK;   /* (the code is recompiled from that version) */
 }
 
+/* The release of the chosen disc, once the check recognised it (the
+ * launcher's title and the window's follow it); else DISC_VERSION_NONE. */
+static int disc_release(void)
+{
+    return s_disc_status == DISC_OK || s_disc_status == DISC_OTHER_DUMP ? disc_version()
+                                                                         : DISC_VERSION_NONE;
+}
+
+static void show_release_title(void)
+{
+    int v = disc_release();
+    platform_set_title(v == DISC_VERSION_EUROPE ? "Kula World"
+                       : v == DISC_VERSION_JAPAN ? "KulaQuest" : "Roll Away");
+}
+
 static void choose_disc(const char *path)
 {
     s_disc_status = disc_check(path, s_disc_detail, sizeof(s_disc_detail));
+    show_release_title();
     if (disc_playable()) {
         snprintf(g_settings_pc.disc_path, sizeof(g_settings_pc.disc_path), "%s", path);
         settings_save();
@@ -611,8 +627,13 @@ static void title(float x, float y)
     shadowed_text(draw, ui_font_bold(), TAG_SIZE * scale, ImVec2(x + 2 * scale, y), COL_ACCENT,
                   "PC PORT");
     y += TAG_SIZE * scale * 1.6f;
-    shadowed_text(draw, font, size, ImVec2(x, y), COL_TEXT, "ROLL");
-    shadowed_text(draw, font, size, ImVec2(x, y + size * 0.88f), COL_ACCENT, "AWAY");
+    /* (the chosen release's name: Roll Away, Kula World or KulaQuest) */
+    int release = disc_release();
+    const char *word1 = release == DISC_VERSION_NONE || release == DISC_VERSION_USA ? "ROLL" : "KULA";
+    const char *word2 = release == DISC_VERSION_EUROPE ? "WORLD"
+                        : release == DISC_VERSION_JAPAN ? "QUEST" : "AWAY";
+    shadowed_text(draw, font, size, ImVec2(x, y), COL_TEXT, word1);
+    shadowed_text(draw, font, size, ImVec2(x, y + size * 0.88f), COL_ACCENT, word2);
 }
 
 /* The disc: a dot for its state, the text and the file. */
@@ -768,6 +789,7 @@ void launcher_init(void)
     if (g_settings_pc.disc_path[0]) {
         s_disc_status = disc_check(g_settings_pc.disc_path, s_disc_detail, sizeof(s_disc_detail));
     }
+    show_release_title();
 }
 
 /* the layout's size at 96 DPI; the window scales it (keeping proportions) */
