@@ -420,12 +420,19 @@ void gte_swc2(int reg, void *address)
 /*
  * NCLIP: twice the signed area of the screen triangle SXY0..2, which the
  * game tests to drop polygons facing away.  With precise vertices the
- * float positions may only drop more: a polygon whose whole-pixel corners
- * face the camera but whose true corners face away (a back face at an
- * outline, which drawn precisely would stick out as a sliver).  They never
- * bring back what the console drops: in Roll Away that showed the inside
- * of the apple's stem hollow and the rims of the coins as stripes.
+ * float positions may drop more: a polygon whose whole-pixel corners face
+ * the camera but whose true corners face away (a back face at an outline,
+ * which drawn precisely would stick out as a sliver).  What the console
+ * drops as facing away stays dropped: in Roll Away bringing it back showed
+ * the inside of the apple's stem hollow and the rims of the coins as
+ * stripes.  Only a polygon squashed flat by the whole pixels (area 0) is
+ * brought back, when its true corners clearly face the camera
+ * (NCLIP_SLIVER, twice the area in pixels; the game turns the coins in
+ * whole units on the CPU, so the sign of a nearly edge-on side is noise):
+ * the strip along a turning coin's edge, which left a gap.
  */
+#define NCLIP_SLIVER    1.0
+
 static int64_t nclip_area(void)
 {
     int64_t x0 = g.sxy[0][0], x1 = g.sxy[1][0], x2 = g.sxy[2][0];
@@ -444,6 +451,9 @@ static int64_t nclip_area(void)
                      - ((double) v[2].x - v[0].x) * ((double) v[1].y - v[0].y);
     if (precise < 0 && area >= 0) {
         return -1;
+    }
+    if (area == 0 && precise >= NCLIP_SLIVER) {
+        return 1;
     }
     return area;
 }
