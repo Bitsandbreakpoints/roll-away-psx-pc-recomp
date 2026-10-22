@@ -380,6 +380,17 @@ static void sound_tab(void)
     help("Heard at once in the game (F1).");
 }
 
+static void game_tab(void)
+{
+    Settings *s = &g_settings_pc;
+    section("SAVING");
+    row("Save after every level");
+    check("##saveevery", &s->save_every_level);
+    note("the save screen after each level, not only every fifth");
+    help("The game saves to the memory card file next to the program. Can be changed during the "
+         "game (F1).");
+}
+
 static void reset_all(void)
 {
     char disc[SETTINGS_PATH_MAX];
@@ -402,6 +413,7 @@ int settings_screen(void)
         if (ImGui::BeginTabItem("Graphics")) { graphics_tab(); ImGui::EndTabItem(); }
         if (ImGui::BeginTabItem("Controls")) { controls_tab(); ImGui::EndTabItem(); }
         if (ImGui::BeginTabItem("Sound")) { sound_tab(); ImGui::EndTabItem(); }
+        if (ImGui::BeginTabItem("Game")) { game_tab(); ImGui::EndTabItem(); }
         ImGui::EndTabBar();
     }
     ImGui::Separator();
@@ -435,7 +447,7 @@ int settings_screen(void)
 static const ImVec2 BACKGROUND_FOCUS(0.69f, 0.50f);
 
 enum { PAGE_MENU, PAGE_SETTINGS };
-enum { TAB_GRAPHICS, TAB_CONTROLS, TAB_SOUND, TAB_COUNT };
+enum { TAB_GRAPHICS, TAB_CONTROLS, TAB_SOUND, TAB_GAME, TAB_COUNT };
 
 static UiImage s_background;
 static int s_page = PAGE_MENU;
@@ -688,7 +700,7 @@ static int menu_page(float w, float h)
 /* the settings: categories on the left, the rows in a panel */
 static void settings_page(float w, float h)
 {
-    static const char *const TABS[TAB_COUNT] = { "GRAPHICS", "CONTROLS", "SOUND" };
+    static const char *const TABS[TAB_COUNT] = { "GRAPHICS", "CONTROLS", "SOUND", "GAME" };
     float scale = ui_scale();
     float margin = MARGIN * scale;
 
@@ -735,6 +747,7 @@ static void settings_page(float w, float h)
     switch (s_tab) {
     case TAB_GRAPHICS: graphics_tab(); break;
     case TAB_CONTROLS: controls_tab(); break;
+    case TAB_GAME: game_tab(); break;
     default: sound_tab(); break;
     }
     ImGui::EndChild();

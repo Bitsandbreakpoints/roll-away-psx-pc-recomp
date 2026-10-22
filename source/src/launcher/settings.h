@@ -64,6 +64,8 @@ typedef struct {
     int volume_music;                   /* the XA music from the CD */
     int volume_effects;                 /* everything the SPU plays */
 
+    int save_every_level;               /* the save screen after every level (else every fifth) */
+
     ControllerConfig players[SETTINGS_PLAYERS];
 } Settings;
 

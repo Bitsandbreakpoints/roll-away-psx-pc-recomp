@@ -23,6 +23,9 @@ typedef struct {
 /* the executable whose code runs */
 extern const RtModule *g_rt_module;
 
+/* hooks.c: the save screen after every level, not only every fifth */
+extern int g_save_every_level;
+
 /* A host pointer for a PS1 address in RAM (any mirror) or the
  * scratchpad; NULL for anything else. */
 void *rt_pointer(uint32_t address);

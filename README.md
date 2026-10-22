@@ -124,6 +124,8 @@ respective owners.*
   effects.
 
 **Comfort**
+- **Save after every level** (optional, under GAME): the game offers its
+  save point after each level, not only every fifth.
 - **Pause menu** with Select + Start (or F1): resume, back to the launcher,
   quit the game, and every setting.
 - **Fast forward**: hold Tab.

@@ -17,6 +17,10 @@ functions is simply translated into both.  Jumps through a register are
 jump tables (a C switch) when the table can be found, otherwise calls of
 whatever function the address belongs to at run time (rt_call()).
 
+A `hook <address> <name>` line has hook_<name>() (the PC port's) run just
+before the instruction at that address: a small change to one of the
+game's own decisions, made in the registers.
+
 Only instructions are translated: no data of the executable ends up in
 the C files (jump tables are read from PS1 memory at run time, which the
 PC port loads from the player's disc).
@@ -48,6 +52,7 @@ class Config:
         self.jtbl = {}          # jr address -> (table address, count)
         self.names = {}         # address -> name (comments only)
         self.hle_ranges = []    # (start, end, name): library code that must not run
+        self.hooks = {}         # address -> name: hook_<name>() runs before that instruction
         for line in open(path, encoding='utf-8'):
             line = line.split('#', 1)[0].split()
             if not line:
@@ -73,6 +78,8 @@ class Config:
                 self.hle_ranges.append((int(args[0], 16), int(args[1], 16), args[2]))
             elif key == 'sym':
                 self.names[int(args[0], 16)] = args[1]
+            elif key == 'hook':
+                self.hooks[int(args[0], 16)] = args[1]
             else:
                 raise SystemExit(f'{path}: unknown key {key}')
 
@@ -101,6 +108,7 @@ class Recompiler:
         self.funcs = {}
         self.stubs = set()
         self.warnings = []
+        self.hooks_placed = set()
 
     def in_hle_range(self, addr):
         return any(start <= addr < end for start, end, _ in self.cfg.hle_ranges)
@@ -525,6 +533,9 @@ class Emitter:
                 body.append(leave(prev_falls))
             if a in f.labels:
                 body.append((a, f'L_{a:08X}: ;'))
+            if a in rc.cfg.hooks:
+                body.append(f'    hook_{rc.cfg.hooks[a]}();')
+                rc.hooks_placed.add(a)
             body.append(f'    /* {a:08X} */ ' + self.insn(f, i, goto))
             if not i.valid:
                 prev_falls = None
@@ -618,6 +629,7 @@ def main():
     header += [f'void {rc.fname(f.entry)}(void);' for f in funcs]
     header += [f'void {rc.fname(a)}(void);' for a in sorted(cfg.hle)]
     header += [f'void {rc.fname(a)}(void);' for a in sorted(rc.stubs)]
+    header += [f'void hook_{name}(void);' for name in sorted(set(cfg.hooks.values()))]
     header += ['', '#endif', '']
     write_if_changed(os.path.join(out_dir, f'{mod}_funcs.h'), '\n'.join(header))
     files = []
@@ -646,6 +658,10 @@ def main():
               f'const char g_{mod}_sha1[] = "{digest}";', '']
     write_if_changed(os.path.join(out_dir, f'{mod}_table.c'), '\n'.join(table))
     files.append(f'{mod}_table.c')
+    missing = sorted(set(cfg.hooks) - rc.hooks_placed)
+    if missing:
+        raise SystemExit('hook not placed (not an instruction of its own): '
+                         + ', '.join(f'{a:08X}' for a in missing))
     write_if_changed(os.path.join(out_dir, f'{mod}_files.txt'), '\n'.join(files) + '\n')
     report = [f'{os.path.basename(exe_path)}: {len(rc.funcs)} functions, {len(cfg.hle)} replaced (hle), '
               f'{sum(len(f.tables) for f in funcs)} jump tables, '
