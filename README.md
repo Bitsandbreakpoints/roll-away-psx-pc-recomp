@@ -83,10 +83,17 @@ pause menu).
 - **Precise vertices**: no PS1 "wobble", perspective-correct textures.
 - **True colour**: smooth shading and transparency in 8 bits per colour,
   without the console's dithering pattern.
-- **Detailed distant textures**: the game draws blocks further away with
-  small, 16-colour copies of their textures, which look blurred; the port
-  finds the full-size texture each copy was made from and draws that
-  instead (keeping the game's darkening with distance).
+- **Detailed distant textures** (on by default): sharp track blocks all
+  the way to the horizon. To save video memory the PS1 game draws every
+  block beyond a short distance with a small copy of its texture, a quarter
+  of the size and only 16 colours, so at a higher resolution the track
+  ahead turns into blurred, washed-out squares a few metres from the ball.
+  The port recognises each small copy by its content, finds the full-size
+  texture it was made from, and draws that instead, so the hieroglyphs,
+  patterns and the shadows of the fruit, coins and keys under them stay as
+  detailed far away as up close. The game's own darkening with distance is
+  kept. Nothing is added to the game: only its own full-size textures are
+  used. See the comparison below.
 - **Picture filters**: sharp pixels, bilinear, a soft-TV filter (GTU-like)
   and four CRT looks: *CRT* (scanlines, mask, curvature), *Soft CRT* (a TV:
   the whole picture softened, HUD and text too, with soft scanlines and a
@@ -102,6 +109,12 @@ pause menu).
 
 *The same moment with each picture filter, a close-up at 1:1 (4× internal
 resolution, a 1920 × 1440 picture). The game's picture is © its
+respective owners.*
+
+![Detailed distant textures, off and on](images/distant_textures.png)
+
+*Detailed distant textures, off (above) and on (below): the same moment, a
+1:1 close-up at 4× internal resolution. The game's picture is © its
 respective owners.*
 
 **Sound**
