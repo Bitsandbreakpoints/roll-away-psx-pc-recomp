@@ -723,14 +723,14 @@ static void command_polygon(const uint32_t *c)
         }
         if (p.textured && texlod_enabled() && from_gte(position_word, count)) {
             /* (detailed distant textures: a small copy drawn with its full-size texture) */
+            int tu[4], tv[4];
+            for (int k = 0; k < count; k++) {
+                tu[k] = h[k].u;
+                tv[k] = h[k].v;
+            }
             if (p.depth == 1) {
-                texlod_note(&p);
+                texlod_note(&p, tu, tv, count);
             } else if (p.depth == 0) {
-                int tu[4], tv[4];
-                for (int k = 0; k < count; k++) {
-                    tu[k] = h[k].u;
-                    tv[k] = h[k].v;
-                }
                 int gain[3];
                 if (texlod_upgrade(&p, tu, tv, count, gain)) {
                     if (p.raw) {

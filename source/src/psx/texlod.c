@@ -6,7 +6,9 @@
  * them (each with its own 16 colours), which look blurred and washed out
  * at a high resolution.  A copy is told apart from the full-size texture by
  * content: its 32 x 32 texels against every 64 x 64 cell of the 8-bit pages
- * and palettes the game has drawn 3D polygons with, scaled down to half
+ * the game has drawn 3D polygons with, each cell in the palette it was drawn
+ * with (a page's cells have different palettes: the blocks with an object
+ * on them have its shadow drawn in, in colours of their own), scaled down to half
  * (each texel the mean of four); the closest, if close enough, is taken.
  * Results are kept per cell until new textures are loaded.  Only the
  * high-resolution picture changes; the game's own VRAM and drawing stay
@@ -24,21 +26,23 @@ int g_texlod_log;                       /* (the log: the first matches) */
 #define SMALL                   32      /* texels per side of a copy */
 #define FULL                    64      /* of the full-size texture */
 #define PAGE_TEXELS             256
-#define MAX_SOURCES             32      /* 8-bit pages seen (each with its first palette) */
+#define MAX_SOURCES             32      /* 8-bit pages seen */
 #define CELLS_PER_PAGE          ((PAGE_TEXELS / FULL) * (PAGE_TEXELS / FULL))
 #define MAX_MATCHES             512
 #define MIN_COMPARED            (SMALL * SMALL / 2)
 
 typedef struct {
-    int page_x, page_y, clut_x, clut_y;
-    int have_small;                     /* `small` is made */
+    int page_x, page_y;
+    int seen[CELLS_PER_PAGE];           /* the cell was drawn, with the palette: */
+    int clut_x[CELLS_PER_PAGE], clut_y[CELLS_PER_PAGE];
+    int have_small[CELLS_PER_PAGE];     /* `small` is made */
     uint8_t small[CELLS_PER_PAGE][SMALL * SMALL][4];   /* RGB + opaque, scaled down */
 } Source;
 
 typedef struct {
     int used;
     int page_x, page_y, clut_x, clut_y, cell_u, cell_v;
-    int sources;                        /* how many sources it was compared with */
+    int sources;                        /* how many source cells it was compared with */
     int found;                          /* a full-size texture was found: */
     int source, cell;
     int gain[3];                        /* its colours to the copy's (x 256): distance shading */
@@ -47,6 +51,7 @@ typedef struct {
 static int s_enabled = 1;
 static Source *s_sources;
 static int s_source_count;
+static int s_cell_count;                /* source cells seen */
 static Match s_matches[MAX_MATCHES];
 
 void texlod_set_enabled(int on)
@@ -62,6 +67,7 @@ int texlod_enabled(void)
 void texlod_forget(void)
 {
     s_source_count = 0;
+    s_cell_count = 0;
     memset(s_matches, 0, sizeof(s_matches));
 }
 
@@ -75,8 +81,11 @@ void texlod_vram_changed(int x, int y, int w, int h)
 {
     for (int i = 0; i < s_source_count; i++) {
         const Source *s = &s_sources[i];
-        if (overlaps(x, y, w, h, s->page_x, s->page_y, PAGE_TEXELS / 2, PAGE_TEXELS)
-            || overlaps(x, y, w, h, s->clut_x, s->clut_y, 256, 1)) {
+        int hit = overlaps(x, y, w, h, s->page_x, s->page_y, PAGE_TEXELS / 2, PAGE_TEXELS);
+        for (int cell = 0; cell < CELLS_PER_PAGE && !hit; cell++) {
+            hit = s->seen[cell] && overlaps(x, y, w, h, s->clut_x[cell], s->clut_y[cell], 256, 1);
+        }
+        if (hit) {
             texlod_forget();
             return;
         }
@@ -110,63 +119,78 @@ static void to_rgb(uint16_t c, int rgb[3])
     rgb[2] = ((c >> 10) & 31) << 3;
 }
 
-void texlod_note(const GpuPrim *p)
+void texlod_note(const GpuPrim *p, const int *u, const int *v, int count)
 {
     if (!s_enabled || p->depth != 1) {
         return;
     }
+    int cu = u[0] / FULL, cv = v[0] / FULL;
+    for (int k = 1; k < count; k++) {
+        if (u[k] / FULL != cu || v[k] / FULL != cv) {
+            return;                     /* (not within one cell) */
+        }
+    }
+    int cell = cv * (PAGE_TEXELS / FULL) + cu;
+    Source *s = NULL;
     for (int i = 0; i < s_source_count; i++) {
-        const Source *s = &s_sources[i];
-        if (s->page_x == p->page_x && s->page_y == p->page_y) {
-            return;                     /* (one palette per page: the pattern is the same) */
+        if (s_sources[i].page_x == p->page_x && s_sources[i].page_y == p->page_y) {
+            s = &s_sources[i];
+            break;
         }
     }
-    if (!s_sources) {
-        s_sources = (Source *) malloc(sizeof(Source) * MAX_SOURCES);
+    if (!s) {
         if (!s_sources) {
-            return;
-        }
-    }
-    if (s_source_count == MAX_SOURCES) {
-        return;
-    }
-    Source *s = &s_sources[s_source_count++];
-    s->page_x = p->page_x;
-    s->page_y = p->page_y;
-    s->clut_x = p->clut_x;
-    s->clut_y = p->clut_y;
-    s->have_small = 0;
-}
-
-/* the source's 16 cells, each scaled down to half */
-static void make_small(Source *s)
-{
-    for (int cell = 0; cell < CELLS_PER_PAGE; cell++) {
-        int cu = (cell % (PAGE_TEXELS / FULL)) * FULL, cv = (cell / (PAGE_TEXELS / FULL)) * FULL;
-        for (int v = 0; v < SMALL; v++) {
-            for (int u = 0; u < SMALL; u++) {
-                int sum[3] = { 0, 0, 0 }, n = 0;
-                for (int k = 0; k < 4; k++) {
-                    uint16_t t = texel(s->page_x, s->page_y, 1, s->clut_x, s->clut_y,
-                                       cu + 2 * u + (k & 1), cv + 2 * v + (k >> 1));
-                    if (t) {
-                        int c[3];
-                        to_rgb(t, c);
-                        sum[0] += c[0];
-                        sum[1] += c[1];
-                        sum[2] += c[2];
-                        n++;
-                    }
-                }
-                uint8_t *out = s->small[cell][v * SMALL + u];
-                for (int c = 0; c < 3; c++) {
-                    out[c] = (uint8_t) (n ? sum[c] / n : 0);
-                }
-                out[3] = n > 0;
+            s_sources = (Source *) malloc(sizeof(Source) * MAX_SOURCES);
+            if (!s_sources) {
+                return;
             }
         }
+        if (s_source_count == MAX_SOURCES) {
+            return;
+        }
+        s = &s_sources[s_source_count++];
+        memset(s->seen, 0, sizeof(s->seen));
+        memset(s->have_small, 0, sizeof(s->have_small));
+        s->page_x = p->page_x;
+        s->page_y = p->page_y;
     }
-    s->have_small = 1;
+    if (!s->seen[cell]) {
+        /* (the first palette the cell is drawn with; the others are its
+         * shades: the pattern is the same) */
+        s->seen[cell] = 1;
+        s->clut_x[cell] = p->clut_x;
+        s->clut_y[cell] = p->clut_y;
+        s_cell_count++;
+    }
+}
+
+/* a source cell scaled down to half */
+static void make_small(Source *s, int cell)
+{
+    int cu = (cell % (PAGE_TEXELS / FULL)) * FULL, cv = (cell / (PAGE_TEXELS / FULL)) * FULL;
+    for (int v = 0; v < SMALL; v++) {
+        for (int u = 0; u < SMALL; u++) {
+            int sum[3] = { 0, 0, 0 }, n = 0;
+            for (int k = 0; k < 4; k++) {
+                uint16_t t = texel(s->page_x, s->page_y, 1, s->clut_x[cell], s->clut_y[cell],
+                                   cu + 2 * u + (k & 1), cv + 2 * v + (k >> 1));
+                if (t) {
+                    int c[3];
+                    to_rgb(t, c);
+                    sum[0] += c[0];
+                    sum[1] += c[1];
+                    sum[2] += c[2];
+                    n++;
+                }
+            }
+            uint8_t *out = s->small[cell][v * SMALL + u];
+            for (int c = 0; c < 3; c++) {
+                out[c] = (uint8_t) (n ? sum[c] / n : 0);
+            }
+            out[3] = n > 0;
+        }
+    }
+    s->have_small[cell] = 1;
 }
 
 /* Compares the copy's cell with every source cell; the best if close
@@ -198,10 +222,13 @@ static void find_match(Match *m)
     long best_sum_a[3] = { 1, 1, 1 }, best_sum_b[3] = { 1, 1, 1 };
     for (int i = 0; i < s_source_count; i++) {
         Source *s = &s_sources[i];
-        if (!s->have_small) {
-            make_small(s);
-        }
         for (int cell = 0; cell < CELLS_PER_PAGE; cell++) {
+            if (!s->seen[cell]) {
+                continue;
+            }
+            if (!s->have_small[cell]) {
+                make_small(s, cell);
+            }
             long sum_a[3] = { 0, 0, 0 }, sum_b[3] = { 0, 0, 0 };
             double la = 0, lb = 0, laa = 0, lbb = 0, lab = 0;
             int compared = 0;
@@ -242,7 +269,7 @@ static void find_match(Match *m)
             }
         }
     }
-    m->sources = s_source_count;
+    m->sources = s_cell_count;
     m->found = best >= 0 && best_corr * 1000 >= MATCH_MIN_PERMILLE;
     m->source = best;
     m->cell = best_cell;
@@ -252,9 +279,9 @@ static void find_match(Match *m)
     }
     if (g_texlod_log < 20 && m->found) {
         g_texlod_log++;
-        psx_log("texlod: page %d,%d clut %d,%d cell %d,%d: %s %.3f (%d sources)", m->page_x,
+        psx_log("texlod: page %d,%d clut %d,%d cell %d,%d: %s %.3f (%d cells)", m->page_x,
                 m->page_y, m->clut_x, m->clut_y, m->cell_u, m->cell_v,
-                m->found ? "found" : "none", best_corr, s_source_count);
+                m->found ? "found" : "none", best_corr, s_cell_count);
     }
 }
 
@@ -301,7 +328,7 @@ int texlod_upgrade(GpuPrim *p, int *u, int *v, int count, int gain[3])
         m->cell_v = cell_v;
         m->sources = -1;
     }
-    if (m->sources != s_source_count) {
+    if (m->sources != s_cell_count) {
         find_match(m);                  /* (new candidates since the last try) */
     }
     if (!m->found) {
@@ -311,8 +338,8 @@ int texlod_upgrade(GpuPrim *p, int *u, int *v, int count, int gain[3])
     int full_u = (m->cell % (PAGE_TEXELS / FULL)) * FULL, full_v = (m->cell / (PAGE_TEXELS / FULL)) * FULL;
     p->page_x = s->page_x;
     p->page_y = s->page_y;
-    p->clut_x = s->clut_x;
-    p->clut_y = s->clut_y;
+    p->clut_x = s->clut_x[m->cell];
+    p->clut_y = s->clut_y[m->cell];
     p->depth = 1;
     memcpy(gain, m->gain, sizeof(m->gain));
     for (int k = 0; k < count; k++) {

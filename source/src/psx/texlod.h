@@ -23,9 +23,10 @@ void texlod_forget(void);
  * forgotten. */
 void texlod_vram_changed(int x, int y, int w, int h);
 
-/* A 3D polygon with an 8-bit texture was drawn: its page and palette are
- * candidates for the full-size textures. */
-void texlod_note(const GpuPrim *p);
+/* A 3D polygon with an 8-bit texture was drawn, its corners' texture
+ * coordinates u[], v[]: the 64 x 64 cell they lie in, in its palette, is a
+ * candidate for the full-size textures. */
+void texlod_note(const GpuPrim *p, const int *u, const int *v, int count);
 
 /*
  * A 3D polygon with a 4-bit texture, its corners' texture coordinates u[],
