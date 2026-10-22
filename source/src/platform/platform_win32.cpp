@@ -13,6 +13,7 @@
 #include <string.h>
 #include <mmsystem.h>          /* timeBeginPeriod */
 #include "platform/platform.h"
+#include "resources.h"
 
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
@@ -237,7 +238,9 @@ static int create_window(void)
     wc.lpfnWndProc = window_proc;
     wc.hInstance = instance;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+    wc.hIcon = LoadIcon(instance, MAKEINTRESOURCE(IDI_APP));
+    wc.hIconSm = (HICON) LoadImage(instance, MAKEINTRESOURCE(IDI_APP), IMAGE_ICON,
+                                   GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
     wc.lpszClassName = WINDOW_CLASS;
     if (!RegisterClassExW(&wc)) {
         return 0;

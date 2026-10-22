@@ -40,7 +40,7 @@ CHDR_CFLAGS = ('-O2 -w -std=gnu11 ' + ' '.join('-I' + CHDR_DIR + '/' + d for d i
 MODULES = [('/SLUS_007.24;1', 'SLUS_007.24', 'recomp/config/main.cfg')]
 DISC_PATTERNS = ['Roll*Away*.chd', 'Roll*Away*.cue', 'Roll*Away*.iso', 'Roll*Away*.bin']
 # files that resources.rc builds into the exe
-RESOURCE_FILES = ['assets/launcher/background.png', 'src/resources.h']
+RESOURCE_FILES = ['assets/launcher/background.png', 'assets/icon/roll_away.ico', 'src/resources.h']
 LIBS = ['d3d11', 'dxgi', 'd3dcompiler_47', 'xinput', 'ole32', 'user32', 'gdi32', 'shell32',
         'comdlg32', 'winmm', 'dwmapi']
 

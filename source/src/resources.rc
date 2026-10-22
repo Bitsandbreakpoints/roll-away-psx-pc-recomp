@@ -4,4 +4,5 @@
  */
 #include "resources.h"
 
+IDI_APP ICON "assets/icon/roll_away.ico"
 IDR_LAUNCHER_BACKGROUND RCDATA "assets/launcher/background.png"
