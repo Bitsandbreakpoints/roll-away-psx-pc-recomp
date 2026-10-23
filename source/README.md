@@ -100,6 +100,10 @@ använda medan de körs.
   (`tools/emulator/duckstation`, BIOS `scph5502.bin` i projektroten) med
   differensbilder.
 - `python tests/window_shot.py build/test/launcher.png`: launcherns fönster.
+- `python tests/game_shots.py <mapp> <från s> <till s> [RA_...=…] [ini:nyckel=värde]`:
+  spelets fönster (filter, widescreen, pausmenyn) varje halv sekund,
+  t.ex. README-bilderna (`ini:window_mode=0 ini:window_width=1280
+  ini:window_height=720 ini:aspect=2`).
 - `python tests/editor_shot.py <ut.png> [bana]` och
   `python tests/editor_drive.py [bana] "click X Y; drag …; key 1; shot ut.png"`:
   baneditorns fönster, styrt med fönstermeddelanden.

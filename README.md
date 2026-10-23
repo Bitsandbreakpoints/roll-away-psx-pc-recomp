@@ -62,8 +62,9 @@ All releases are on the [Releases page](https://github.com/Bitsandbreakpoints/ro
 ![The pause menu](images/pause-menu.png)
 
 *In-game pictures: Roll Away, Kula World and KulaQuest running in this port
-(4× internal resolution; the first ones with the soft-TV filter). The game's
-pictures shown here are © their respective owners.*
+(4× internal resolution, 16:9 widescreen, the soft-TV filter; the movies
+keep their 4:3). The game's pictures shown here are © their respective
+owners.*
 
 ## Disclaimer
 
