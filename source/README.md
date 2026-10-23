@@ -27,7 +27,8 @@ rörliga, smulande, blinkande, lasrar) och allt som kan ligga på blocken
 (start, nycklar, utgång, mynt, ädelstenar, frukt, power-ups, faror,
 teleportrar, knappar, fiender). Världens egna blocktexturer läses från
 skivan. Spelets regler kontrolleras medan man bygger. Banan sparas som
-`.rlv`; "Play" (F5) startar spelet direkt i banan, och i launchern spelar
+`.rlv` med sin typ (vanlig bana eller bonusbana – utan typen gör spelet
+en bana utan nycklar till bonusbana); "Play" (F5) startar spelet direkt i banan, och i launchern spelar
 PLAY OWN LEVEL (eller en `.rlv` som dras in i fönstret) en sparad bana.
 File > Open a level of the game öppnar spelets egna banor från skivan.
 

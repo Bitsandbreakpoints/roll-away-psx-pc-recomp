@@ -16,7 +16,10 @@ const char *const g_level_theme_names[LEVEL_THEME_COUNT] = {
     "Hiro", "Hills", "Inca", "Arctic", "Cowboy", "Field", "Atlantis", "Haze", "Mars", "Hell"
 };
 
-/* the header of a .rlv: magic, version, theme, data size, name */
+/* the header of a .rlv: magic, version, theme (low byte; the high byte:
+ * 1 the type is given, 2 a bonus level), data size, name */
+#define TYPE_GIVEN              0x100
+#define TYPE_BONUS              0x200
 #define HEADER_SIZE             (4 + 2 + 2 + 4 + LEVEL_NAME_SIZE)
 
 static uint16_t word(const uint8_t *data, int index)
@@ -62,6 +65,7 @@ int level_data_check(const uint8_t *data, int size, char *error, int error_size)
 int level_file_load(const char *path, LevelFile *out, char *error, int error_size)
 {
     memset(out, 0, sizeof(*out));
+    out->type = LEVEL_TYPE_GAME_RULE;
     int capacity = LEVEL_MAX_BYTES + HEADER_SIZE;
     uint8_t *buffer = (uint8_t *) malloc((size_t) capacity);
     if (!buffer) {
@@ -82,7 +86,10 @@ int level_file_load(const char *path, LevelFile *out, char *error, int error_siz
             fail(error, error_size, "The level was made by a newer version of the editor.");
             return 0;
         }
-        out->theme = buffer[6] | buffer[7] << 8;
+        int theme = buffer[6] | buffer[7] << 8;
+        out->theme = theme & 0xFF;
+        out->type = !(theme & TYPE_GIVEN) ? LEVEL_TYPE_GAME_RULE
+                    : (theme & TYPE_BONUS) ? LEVEL_TYPE_BONUS : LEVEL_TYPE_NORMAL;
         size = (int) read32(buffer + 8);
         memcpy(out->name, buffer + 12, LEVEL_NAME_SIZE);
         out->name[LEVEL_NAME_SIZE - 1] = 0;
@@ -116,6 +123,9 @@ int level_file_save(const char *path, const LevelFile *level)
     memcpy(buffer, LEVEL_FILE_MAGIC, 4);
     buffer[4] = LEVEL_FILE_VERSION;
     buffer[6] = (uint8_t) level->theme;
+    if (level->type != LEVEL_TYPE_GAME_RULE) {
+        buffer[7] = (uint8_t) ((TYPE_GIVEN | (level->type == LEVEL_TYPE_BONUS ? TYPE_BONUS : 0)) >> 8);
+    }
     for (int i = 0; i < 4; i++) {
         buffer[8 + i] = (uint8_t) ((uint32_t) level->size >> (8 * i));
     }

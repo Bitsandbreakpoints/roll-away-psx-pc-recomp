@@ -100,7 +100,8 @@ PLAY OWN LEVEL (or dropping a .rlv on the window) plays a saved level.
 File > Open a level of the game opens any of the game's levels from your
 disc to look at or to start from. The game's rules are checked as you
 build (one start, things only on open sides, the exit opens when all keys
-are taken, a level without keys is played as a bonus level).
+are taken; choose a normal or a bonus level - a normal level without
+keys has its exit open at once).
 
 Requires Windows 10 or later.
 

@@ -41,8 +41,16 @@ extern const char *const g_level_theme_names[LEVEL_THEME_COUNT];
 #define LEVEL_FILE_VERSION      1
 #define LEVEL_NAME_SIZE         48
 
+/* LevelFile.type: how the game plays the level */
+enum LevelType {
+    LEVEL_TYPE_GAME_RULE = -1,          /* as the game decides: a bonus level if it has no keys */
+    LEVEL_TYPE_NORMAL = 0,              /* keys open the exit (none: it is open at once) */
+    LEVEL_TYPE_BONUS = 1                /* the game's bonus level (BONUS letters) */
+};
+
 typedef struct {
     int theme;                          /* 0..LEVEL_THEME_COUNT - 1 */
+    int type;                           /* enum LevelType */
     char name[LEVEL_NAME_SIZE];         /* UTF-8, may be empty */
     uint8_t *data;                      /* the game's level data */
     int size;                           /* bytes */

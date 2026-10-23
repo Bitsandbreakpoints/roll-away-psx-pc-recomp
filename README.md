@@ -169,8 +169,10 @@ launcher) is a 3D level editor.
   the start, keys, the exit, coins, gems, fruit, power-ups, spikes,
   patches, bounce pads, arrows, transporters, buttons and enemies.
 - **The game's rules** are checked while you build: one start, things
-  only on open sides, the exit opens when all keys are taken, a level
-  without keys is played as a bonus level.
+  only on open sides, the exit opens when all keys are taken.
+- **Normal or bonus level**: a normal level keeps its world's look (with
+  no keys its exit is open at once); a bonus level gets the game's bonus
+  look and the BONUS letters.
 - **The world's own look**: the editor reads the block textures from your
   disc, and the level is played in the world you choose (its textures, sky
   and music).

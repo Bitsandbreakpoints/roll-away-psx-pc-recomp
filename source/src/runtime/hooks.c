@@ -58,3 +58,23 @@ void hook_custom_level_file(void)
         GPR[4] = (uint32_t) world;
     }
 }
+
+/* (custom_level.c) */
+int custom_level_type(void);
+
+/*
+ * 0x27BD4 and 0x35FC8 (USA), as a level is set up: the game makes it a
+ * bonus level (its own look, the BONUS letters; the first test) and opens
+ * the exit (the second) when the number of keys (v0) is 0.  A level of
+ * the player's says which it is: a normal level without keys keeps its
+ * look and has the exit open at once.
+ */
+void hook_custom_level_type(void)
+{
+    int type = custom_level_type();
+    if (type == 0 && GPR[2] == 0) {
+        GPR[2] = 1;                     /* (not 0 keys: no bonus level) */
+    } else if (type == 1) {
+        GPR[2] = 0;
+    }
+}

@@ -103,6 +103,12 @@ const char *custom_level_name(void)
     return s_name;
 }
 
+/* (hooks.c) the level's type (level_file.h LevelType) */
+int custom_level_type(void)
+{
+    return s_active ? s_level.type : LEVEL_TYPE_GAME_RULE;
+}
+
 /* (hooks.c) the world the game is to load, -1 for its own choice */
 int custom_level_world(void)
 {

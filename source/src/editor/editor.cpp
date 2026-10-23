@@ -218,6 +218,7 @@ static bool write_level(const std::string &path)
     std::vector<uint8_t> data = g_ed.level.to_game();
     LevelFile lf = {};
     lf.theme = g_ed.level.settings.theme;
+    lf.type = g_ed.level.settings.bonus ? LEVEL_TYPE_BONUS : LEVEL_TYPE_NORMAL;
     snprintf(lf.name, sizeof(lf.name), "%s", g_ed.level.settings.name.c_str());
     lf.data = data.data();
     lf.size = (int) data.size();
@@ -271,7 +272,8 @@ static void new_level()
     view_focus();
 }
 
-static void load_data(const std::vector<uint8_t> &data, int theme, const std::string &name,
+/* `type`: level_file.h LevelType (the game's rule: a bonus level if no keys) */
+static void load_data(const std::vector<uint8_t> &data, int theme, int type, const std::string &name,
                       const std::string &path)
 {
     Level fresh;
@@ -283,6 +285,8 @@ static void load_data(const std::vector<uint8_t> &data, int theme, const std::st
         return;
     }
     fresh.update_paths();
+    fresh.settings.bonus = type == LEVEL_TYPE_GAME_RULE ? fresh.count_things(THING_KEY) == 0
+                                                        : type == LEVEL_TYPE_BONUS;
     bool world = theme != g_ed.level.settings.theme;
     g_ed.level = fresh;
     g_ed.path = path;
@@ -307,9 +311,9 @@ void editor_open_path(const char *path)
     }
     std::vector<uint8_t> data(lf.data, lf.data + lf.size);
     std::string name = lf.name;
-    int theme = lf.theme;
+    int theme = lf.theme, type = lf.type;
     level_file_free(&lf);
-    load_data(data, theme, name, path);
+    load_data(data, theme, type, name, path);
     editor_say("Opened %s", base_name(path).c_str());
 }
 
@@ -768,6 +772,18 @@ static void level_panel()
         editor_world_changed();
         editor_changed();
     }
+    int type = st.bonus ? 1 : 0;
+    static const char *const TYPES[2] = { "Normal level", "Bonus level" };
+    ImGui::SetNextItemWidth(170);
+    if (ImGui::Combo("Type", &type, TYPES, 2) && (type == 1) != st.bonus) {
+        editor_snapshot();
+        st.bonus = type == 1;
+        editor_changed();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Normal: the keys open the exit (no keys: it is open at once).\n"
+                          "Bonus: the game's bonus level, with its own look and the BONUS letters.");
+    }
     int seconds = st.seconds;
     ImGui::SetNextItemWidth(170);
     if (ImGui::SliderInt("Time (s)", &seconds, 10, 600)) {
@@ -916,7 +932,7 @@ static void disc_dialog()
         const DiscLevel &dl = s_disc_levels[s_disc_choice];
         if (assets_read_level(s_disc_world, dl, &data)) {
             std::string name = dl.name + " (" + g_level_theme_names[s_disc_world] + ")";
-            load_data(data, s_disc_world, name, "");
+            load_data(data, s_disc_world, LEVEL_TYPE_GAME_RULE, name, "");
             editor_say("The game's %s: save it as a level of your own to change it.", name.c_str());
         }
         ImGui::CloseCurrentPopup();

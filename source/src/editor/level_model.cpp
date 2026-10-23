@@ -406,14 +406,17 @@ std::vector<Level::Problem> Level::check() const
                        std::to_string(MAX_COLLECTABLES) + ").", -1 });
     }
     int exits = count_things(THING_EXIT), keys = count_things(THING_KEY);
-    if (exits == 0 && keys) {
-        out.push_back({ false, "There is no exit: the level cannot be finished.", -1 });
-    } else if (exits > 1) {
-        out.push_back({ false, "There is more than one exit.", -1 });
-    }
-    if (keys == 0) {
-        out.push_back({ false, "No keys: the game plays it as a bonus level (spell BONUS, no "
-                       "exit needed).", -1 });
+    if (!settings.bonus) {
+        if (exits == 0) {
+            out.push_back({ false, "There is no exit: the level cannot be finished.", -1 });
+        } else if (exits > 1) {
+            out.push_back({ false, "There is more than one exit.", -1 });
+        }
+        if (keys == 0 && exits) {
+            out.push_back({ false, "No keys: the exit is open from the start.", -1 });
+        }
+    } else if (keys) {
+        out.push_back({ false, "A bonus level with keys: the game's bonus levels have none.", -1 });
     }
     if (count_things(THING_FRUIT) > 1) {
         out.push_back({ false, "There is more than one fruit (the game's levels have one).", -1 });
