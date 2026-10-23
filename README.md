@@ -43,7 +43,7 @@ All releases are on the [Releases page](https://github.com/Bitsandbreakpoints/ro
    and movies: it holds no XA sectors). The launcher checks that the image
    is *Roll Away (USA)*, *Kula World (Europe)* or *KulaQuest (Japan)*, and
    which of them.
-4. Click **PLAY**.
+4. Click **PLAY**, or **LEVEL EDITOR** to make levels of your own.
 
 ![The launcher](images/launcher.png)
 
@@ -156,36 +156,91 @@ respective owners.*
 - **Disc images**: `.bin`/`.cue`, `.chd` (compressed) and `.iso`.
 - **Memory card in a file**: `roll_away_card1.mcd` next to the program, in
   the raw format emulators use. No BIOS needed.
+- **Your own levels**: a 3D [level editor](#level-editor), and the game
+  plays the levels you make (PLAY OWN LEVEL in the launcher).
 
 ## Level editor
 
-Make your own levels: `roll_away_editor.exe` (**LEVEL EDITOR** in the
-launcher) is a 3D level editor.
+**Make your own levels, and play them in the game.** The port comes with a
+3D level editor, `roll_away_editor.exe`: start it from the launcher
+(**LEVEL EDITOR**) or on its own. It reads your disc too, so the blocks
+look as they do in the game.
+
+![The level editor: a level of three floors in the Hiro world, the exit selected](images/level-editor.png)
+
+<p align="center"><em>The level editor: the tools and the palette of blocks and things on the left, the level and the selection on the right. The exit is selected; it leads to the next level of the series, readme_2.rlv.</em></p>
+
+![The same level played in the game](images/level-editor-play.png)
+
+<p align="center"><em>The same level in the game (F5 in the editor).</em></p>
+
+### What it does
 
 - **Blocks snap together**: click the side of a block and the new block
-  sits right there; drag to build a row, a floor or a wall.
+  sits right there. Drag to build a row, a floor or a wall in one go. For
+  blocks in the air, the build plane (G) gives you a floor to start from.
 - **Everything the game has**: normal, fire, ice, invisible and acid
-  blocks, moving, crumbling and flashing blocks, lasers, and on the blocks
-  the start, keys, the exit, coins, gems, fruit, power-ups, spikes,
-  patches, bounce pads, arrows, transporters, buttons and enemies.
-- **The game's rules** are checked while you build: one start, things
-  only on open sides, the exit opens when all keys are taken.
+  blocks, moving, crumbling and flashing blocks and lasers; and on the
+  blocks the start, keys, the exit and the hidden exit, coins, gems, fruit,
+  power-ups, spikes and patches, bounce pads, arrows, transporters, buttons
+  and enemies. Things that face a way show an arrow; transporters, buttons
+  and lasers are linked by clicking their target, and the links are drawn.
+- **The game's rules, checked as you build**: one start; things only on
+  the open sides of normal, fire, ice, invisible and acid blocks (a new
+  block takes away what was on a side it covers); the exit opens when all
+  keys are taken; no more special blocks and things to pick up than the
+  game can hold. **CHECK** on the right says what is missing or odd.
 - **Normal or bonus level**: a normal level keeps its world's look (with
-  no keys its exit is open at once); a bonus level gets the game's bonus
+  no keys, its exit is open at once); a bonus level gets the game's bonus
   look and the BONUS letters.
-- **The world's own look**: the editor reads the block textures from your
-  disc, and the level is played in the world you choose (its textures, sky
-  and music).
-- **A series of levels**: on an exit you choose the level that comes next
-  (the hidden exit can lead elsewhere), also in another world.
-- **Play at once**: **Play** (F5) starts the game straight into the level.
-  Saved levels (`.rlv`) are played with **PLAY OWN LEVEL** in the launcher
-  or by dropping them on its window.
-- **Learn from the masters**: File > Open a level of the game opens any of
-  the game's levels from your disc.
+- **Any world**: choose the world (Hiro, Hills, Inca, Arctic, Cowboy,
+  Field, Atlantis, Haze, Mars, Hell) and the level is played with its
+  textures, sky and music. The time is yours to set.
+- **A series of levels**: select an exit and choose the level that comes
+  next (**Next level**). The hidden exit can lead somewhere else, and the
+  next level can be in another world: finish one and the game moves on to
+  the next, as with its own levels.
+- **Play at once**: **Play** (F5) starts the game straight into the level,
+  past the intro and the menus. Esc in the game brings you back.
+- **Learn from the masters**: **File > Open a level of the game** opens any
+  of the game's own levels from your disc, to look at or to build on.
+- **Undo and redo** (Ctrl+Z, Ctrl+Y).
+
+### Making a level
+
+1. Start the editor. A new level is one block with the start on it.
+2. **Build** (1): click the sides of blocks to add blocks; pick the kind
+   on the left (fire, ice, moving, laser ...).
+3. **Things** (4): pick a thing on the left and click the side of a block
+   to put it there: keys, the exit, coins, the fruit, enemies ...
+4. **Select** (5): click a block or a thing to change it on the right: the
+   way it faces, its colour or kind, what a transporter leads to, where a
+   moving block goes, the next level of an exit.
+5. Set the name, the world, the type and the time under **LEVEL**, save
+   (Ctrl+S) and press **F5** to play.
+
+| Editor | Keys and mouse |
+|---|---|
+| Turn around the level | Right mouse button |
+| Move | Middle mouse button, Shift + right button, or W A S D / Q E |
+| Closer / farther | Mouse wheel |
+| Tools: Build, Erase, Paint, Things, Select | 1, 2, 3, 4, 5 |
+| Turn the selected thing / take it away | R / Delete |
+| Build plane on/off, its height | G, Page Up / Page Down |
+| Look at the selection | F |
+| Undo / redo / save / play | Ctrl+Z / Ctrl+Y / Ctrl+S / F5 |
+
+### Playing and sharing levels
+
+Levels are saved as small `.rlv` files. Play one with **PLAY OWN LEVEL**
+in the launcher, or drop it on the launcher's window. A series of levels
+is a folder of `.rlv` files: the exits refer to the next ones by name, so
+the folder can be moved or shared as it is. A `.rlv` holds only the level
+you made, nothing from the game: whoever plays it needs their own disc.
 
 The game itself is not changed: when you play your own level, the port
-serves it in place of the game's levels as they are read from the disc.
+serves it in place of the game's levels as they are read from the disc,
+and points the game to the level's world.
 
 ## Controls
 
@@ -215,7 +270,8 @@ Everything stays in the program's folder:
 - `settings.ini`: the settings.
 - `roll_away_card1.mcd`: the memory card in slot 1.
 - `roll_away.log`: a log for troubleshooting.
-- `level_editor.ini`: the level editor's disc, if not the launcher's.
+- `roll_away_editor.exe`: the level editor; `level_editor.ini`: its disc,
+  if not the launcher's. Your levels (`.rlv`) are wherever you save them.
 
 ## FAQ
 
@@ -256,7 +312,8 @@ interrupts, and Sony's libraries for graphics, the CD-ROM with its XA music
 and movie streaming, the movie decoder, controllers, the memory card and
 the BIOS written anew), the PlayStation's graphics, geometry, sound and
 movie chips in software, the launcher and the window, picture and sound
-output, plus the build scripts, the tests and the open-source libraries it
+output, the level editor and the support for your own levels, plus the
+build scripts, the tests and the open-source libraries it
 uses.
 
 The game's code is not in the repository. It is recompiled when you build,
