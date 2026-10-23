@@ -107,7 +107,8 @@ keys has its exit open at once).
 
 Requires Windows 10 or later.
 
-The licences of the third-party code are in the "licenses" folder.
+The port's own code is under the MIT License (LICENSE.txt). The licences
+of the third-party code are in the "licenses" folder.
 Roll Away is a trademark of its owner; this project is not affiliated
 with or endorsed by Psygnosis, Game Design Sweden or Sony.
 """
@@ -171,6 +172,8 @@ def main():
         if editor:
             z.writestr(f'{FOLDER}/roll_away_editor.exe', editor)
         z.writestr(f'{FOLDER}/README.txt', README.replace('\n', '\r\n'))
+        z.writestr(f'{FOLDER}/LICENSE.txt', read(os.path.join(HERE, 'LICENSE')).replace(b'\r\n', b'\n')
+                   .replace(b'\n', b'\r\n'))
         z.writestr(f'{FOLDER}/licenses/THIRD_PARTY.md', read(os.path.join(HERE, 'THIRD_PARTY.md')))
         for name, source, start in LICENSES:
             z.writestr(f'{FOLDER}/licenses/{name}', license_text(source, start))

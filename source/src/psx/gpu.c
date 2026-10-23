@@ -525,6 +525,78 @@ static int from_picture(const Prim *p, int u0, int v0, int w, int h)
     return 0;
 }
 
+/*
+ * A background tiled from rectangles (the Scores screen: 48 x 48 tiles of
+ * one texture in a grid from -12 to 372, nothing cleared below): each
+ * tile alone is narrower than the screen, so it would be squeezed and the
+ * sides would never be drawn again (old pictures stay there, the 3D
+ * leaves trails, the game's fade darkens them to black).  Rectangles of
+ * one kind (texture page, size) that together covered the whole area -
+ * all four edges - in the last frame are not squeezed in this one.
+ */
+#define TILE_KINDS              16
+typedef struct {
+    int page_x, page_y, w, h;
+    int x1, y1, x2, y2;                 /* what they covered, in the drawing area */
+    int area_w, area_h;
+} TileKind;
+static TileKind s_tiles[TILE_KINDS], s_tiles_last[TILE_KINDS];
+static int s_tile_count, s_tile_last_count;
+static uint32_t s_tile_frame;
+
+static int tiles_cover(const TileKind *t)
+{
+    return t->x1 <= 0 && t->x2 >= t->area_w - 1 && t->y1 <= 0 && t->y2 >= t->area_h - 1;
+}
+
+/* Notes a 2D rectangle; TRUE if its kind tiled the whole area last frame. */
+static int background_tile(const Prim *p, int x, int y, int w, int h)
+{
+    if (s_tile_frame != g_pgxp_frame) {
+        s_tile_frame = g_pgxp_frame;
+        s_tile_last_count = 0;
+        for (int i = 0; i < s_tile_count; i++) {
+            if (tiles_cover(&s_tiles[i])) {
+                s_tiles_last[s_tile_last_count++] = s_tiles[i];
+            }
+        }
+        s_tile_count = 0;
+    }
+    TileKind *t = NULL;
+    for (int i = 0; i < s_tile_count && !t; i++) {
+        if (s_tiles[i].page_x == p->page_x && s_tiles[i].page_y == p->page_y && s_tiles[i].w == w
+            && s_tiles[i].h == h) {
+            t = &s_tiles[i];
+        }
+    }
+    if (!t && s_tile_count < TILE_KINDS) {
+        t = &s_tiles[s_tile_count++];
+        t->page_x = p->page_x;
+        t->page_y = p->page_y;
+        t->w = w;
+        t->h = h;
+        t->x1 = t->y1 = 0x7FFF;
+        t->x2 = t->y2 = -0x8000;
+    }
+    if (t) {
+        x -= s.clip_x1;                 /* (the game draws into two buffers in turn) */
+        y -= s.clip_y1;
+        t->area_w = s.clip_x2 - s.clip_x1 + 1;
+        t->area_h = s.clip_y2 - s.clip_y1 + 1;
+        t->x1 = x < t->x1 ? x : t->x1;
+        t->y1 = y < t->y1 ? y : t->y1;
+        t->x2 = x + w - 1 > t->x2 ? x + w - 1 : t->x2;
+        t->y2 = y + h - 1 > t->y2 ? y + h - 1 : t->y2;
+    }
+    for (int i = 0; i < s_tile_last_count; i++) {
+        const TileKind *l = &s_tiles_last[i];
+        if (l->page_x == p->page_x && l->page_y == p->page_y && l->w == w && l->h == h) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* 3D: a corner stored by the GTE, or all corners positions the GTE
  * projected lately (the game may copy them into its packets itself) */
 static int from_gte(const int *position_word, int count)
@@ -929,7 +1001,8 @@ static void command_rectangle(const uint32_t *c)
                 s.clip_y1, s.clip_x2, s.clip_y2);
     }
     if (squeeze_active() && w > 0 && h > 0) {
-        if (!spans_width(v.x, v.x + w - 1) && !from_picture(&p, u0, v0, w, h)) {
+        if (!spans_width(v.x, v.x + w - 1) && !from_picture(&p, u0, v0, w, h)
+            && !background_tile(&p, v.x, v.y, w, h)) {
             squeezed_rectangle(&p, &v, w, h, u0, v0);
             return;
         }
