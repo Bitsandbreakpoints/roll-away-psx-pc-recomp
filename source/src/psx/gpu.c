@@ -506,6 +506,25 @@ static int spans_width(int min_x, int max_x)
     return min_x <= s.clip_x1 && max_x >= s.clip_x2;
 }
 
+/* A rectangle textured from a picture buffer (15-bit texels taken from
+ * an area the game draws its pictures into): the screen copied back, as
+ * the Lethargy pill's blur does with the last picture in two strips.  It
+ * is the picture as it was drawn, already widescreen: not squeezed. */
+static int from_picture(const Prim *p, int u0, int v0, int w, int h)
+{
+    if (!p->textured || p->depth != 2) {
+        return 0;
+    }
+    int x = p->page_x + u0, y = p->page_y + v0;
+    for (int i = 0; i < s_wide_buffer_count; i++) {
+        int bx = s_wide_buffers[i].x, by = s_wide_buffers[i].y;
+        if (x >= bx && x + w <= bx + s.disp_w && y >= by && y + h <= by + s.disp_h + 16) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* 3D: a corner stored by the GTE, or all corners positions the GTE
  * projected lately (the game may copy them into its packets itself) */
 static int from_gte(const int *position_word, int count)
@@ -901,8 +920,16 @@ static void command_rectangle(const uint32_t *c)
         w = c[i] & 0x3FF;
         h = (c[i] >> 16) & 0x1FF;
     }
+    if (g_prim_trace[4] && g_pgxp_frame >= (uint32_t) g_prim_trace[4]
+        && g_pgxp_frame <= (uint32_t) (g_prim_trace[5] > g_prim_trace[4] ? g_prim_trace[5] : g_prim_trace[4])) {
+        /* (RA_PRIM_TRACE: the rectangles too) */
+        psx_log("rect %u %02X tex %d page %d,%d d%d clut %d,%d rgb %d,%d,%d at %d,%d size %d,%d uv %d,%d "
+                "area %d,%d-%d,%d", g_pgxp_frame, op, p.textured, p.page_x, p.page_y, p.depth, p.clut_x,
+                p.clut_y, v.r, v.g, v.b, v.x - s.clip_x1, v.y - s.clip_y1, w, h, u0, v0, s.clip_x1,
+                s.clip_y1, s.clip_x2, s.clip_y2);
+    }
     if (squeeze_active() && w > 0 && h > 0) {
-        if (!spans_width(v.x, v.x + w - 1)) {
+        if (!spans_width(v.x, v.x + w - 1) && !from_picture(&p, u0, v0, w, h)) {
             squeezed_rectangle(&p, &v, w, h, u0, v0);
             return;
         }
@@ -966,6 +993,10 @@ void gpu_store_image(int x, int y, int w, int h, uint16_t *data)
 
 void gpu_move_image(int sx, int sy, int dx, int dy, int w, int h)
 {
+    if (g_prim_trace[4] && g_pgxp_frame >= (uint32_t) g_prim_trace[4]
+        && g_pgxp_frame <= (uint32_t) (g_prim_trace[5] > g_prim_trace[4] ? g_prim_trace[5] : g_prim_trace[4])) {
+        psx_log("move %u from %d,%d to %d,%d size %d,%d", g_pgxp_frame, sx, sy, dx, dy, w, h);
+    }
     texlod_vram_changed(dx, dy, w, h);
     for (int row = 0; row < h; row++) {
         for (int col = 0; col < w; col++) {
