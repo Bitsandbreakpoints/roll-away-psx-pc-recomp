@@ -167,11 +167,11 @@ respective owners.*
 (**LEVEL EDITOR**) or on its own. It reads your disc too, so the blocks
 look as they do in the game.
 
-![The level editor: a level of three floors in the Hiro world, the exit selected](images/level-editor.png)
+![The level editor: a level of three floors in the Hiro world, the exit selected](images/editor.png)
 
 <p align="center"><em>The level editor: the tools and the palette of blocks and things on the left, the level and the selection on the right. The exit is selected; it leads to the next level of the series, readme_2.rlv.</em></p>
 
-![The same level played in the game](images/level-editor-play-wide.png)
+![The same level played in the game](images/editor-play.png)
 
 <p align="center"><em>The same level in the game (F5 in the editor).</em></p>
 
