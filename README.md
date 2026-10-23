@@ -328,6 +328,15 @@ source\build.bat --disc "D:\Games\Roll Away (USA).chd" --disc "D:\Games\Kula Wor
 The first build downloads the compiler (llvm-mingw) and ninja; Python 3 is
 needed. See [source/README.md](source/README.md).
 
+## License
+
+The port's own source code and tools are released under the
+[MIT License](LICENSE). This covers only the code written for this
+project. It does not cover the game itself (which you must own), the
+box covers and in-game pictures (© their respective owners) or the
+third-party libraries, which keep their own licences (see
+[THIRD_PARTY.md](THIRD_PARTY.md)).
+
 ## Credits
 
 - Built with [Dear ImGui](https://github.com/ocornut/imgui) and
