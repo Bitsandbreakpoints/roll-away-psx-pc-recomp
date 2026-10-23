@@ -49,17 +49,17 @@ All releases are on the [Releases page](https://github.com/Bitsandbreakpoints/ro
 
 ## Pictures
 
-![The Psygnosis intro movie](images/intro.png)
+![The Psygnosis intro movie](images/intro-wide.png)
 
-![The title screen](images/title.png)
+![The title screen](images/title-wide.png)
 
-![Kula World (Europe): the title screen](images/title-eu.png)
+![Kula World (Europe): the title screen](images/title-eu-wide.png)
 
-![KulaQuest (Japan): the title screen](images/title-jp.png)
+![KulaQuest (Japan): the title screen](images/title-jp-wide.png)
 
-![A stage](images/level.png)
+![A stage](images/level-wide.png)
 
-![The pause menu](images/pause-menu.png)
+![The pause menu](images/pause-menu-wide.png)
 
 *In-game pictures: Roll Away, Kula World and KulaQuest running in this port
 (4× internal resolution, 16:9 widescreen, the soft-TV filter; the movies
@@ -171,7 +171,7 @@ look as they do in the game.
 
 <p align="center"><em>The level editor: the tools and the palette of blocks and things on the left, the level and the selection on the right. The exit is selected; it leads to the next level of the series, readme_2.rlv.</em></p>
 
-![The same level played in the game](images/level-editor-play.png)
+![The same level played in the game](images/level-editor-play-wide.png)
 
 <p align="center"><em>The same level in the game (F5 in the editor).</em></p>
 
