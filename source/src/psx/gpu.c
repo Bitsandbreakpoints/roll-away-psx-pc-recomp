@@ -647,9 +647,10 @@ static void command_polygon(const uint32_t *c)
         if (inside) {
             PgxpVertex pv;
             char line[512];
-            int n = snprintf(line, sizeof(line), "prim %u %02X tex %d gte %d page %d,%d d%d clut %d,%d:",
-                             g_pgxp_frame, op, p.textured, from_gte(position_word, count), p.page_x,
-                             p.page_y, p.depth, p.clut_x, p.clut_y);
+            int n = snprintf(line, sizeof(line), "prim %u %02X tex %d gte %d page %d,%d d%d clut %d,%d "
+                             "rgb %d,%d,%d%s:", g_pgxp_frame, op, p.textured,
+                             from_gte(position_word, count), p.page_x, p.page_y, p.depth, p.clut_x,
+                             p.clut_y, v[0].r, v[0].g, v[0].b, p.raw ? " raw" : "");
             for (int k = 0; k < count && n < (int) sizeof(line) - 40; k++) {
                 int w = position_word[k];
                 int precise = s_cmd_src[w] && pgxp_lookup(s_cmd_src[w], s_cmd[w], &pv);

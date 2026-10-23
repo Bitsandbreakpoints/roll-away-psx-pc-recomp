@@ -8,8 +8,12 @@
  * content: its 32 x 32 texels against every 64 x 64 cell of the 8-bit pages
  * the game has drawn 3D polygons with, each cell in the palette it was drawn
  * with (a page's cells have different palettes: the blocks with an object
- * on them have its shadow drawn in, in colours of their own), scaled down to half
- * (each texel the mean of four); the closest, if close enough, is taken.
+ * on them have its shadow drawn in, in colours of their own; and one cell
+ * is drawn with several palettes - the same pattern in other colours),
+ * scaled down to half (each texel the mean of four); the closest pattern,
+ * if close enough, is taken, in the palette whose colours are closest to
+ * the copy's (else the block's colours jump when the game changes to the
+ * full-size texture near the camera).
  * Results are kept per cell until new textures are loaded.  Only the
  * high-resolution picture changes; the game's own VRAM and drawing stay
  * as they are.
@@ -28,15 +32,17 @@ int g_texlod_log;                       /* (the log: the first matches) */
 #define PAGE_TEXELS             256
 #define MAX_SOURCES             32      /* 8-bit pages seen */
 #define CELLS_PER_PAGE          ((PAGE_TEXELS / FULL) * (PAGE_TEXELS / FULL))
+#define SLOTS_PER_PAGE          48      /* cells x the palettes each is drawn with */
 #define MAX_MATCHES             512
 #define MIN_COMPARED            (SMALL * SMALL / 2)
 
 typedef struct {
     int page_x, page_y;
-    int seen[CELLS_PER_PAGE];           /* the cell was drawn, with the palette: */
-    int clut_x[CELLS_PER_PAGE], clut_y[CELLS_PER_PAGE];
-    int have_small[CELLS_PER_PAGE];     /* `small` is made */
-    uint8_t small[CELLS_PER_PAGE][SMALL * SMALL][4];   /* RGB + opaque, scaled down */
+    int slots;                          /* a cell drawn with a palette: */
+    int cell[SLOTS_PER_PAGE];
+    int clut_x[SLOTS_PER_PAGE], clut_y[SLOTS_PER_PAGE];
+    int have_small[SLOTS_PER_PAGE];     /* `small` is made */
+    uint8_t small[SLOTS_PER_PAGE][SMALL * SMALL][4];   /* RGB + opaque, scaled down */
 } Source;
 
 typedef struct {
@@ -44,7 +50,7 @@ typedef struct {
     int page_x, page_y, clut_x, clut_y, cell_u, cell_v;
     int sources;                        /* how many source cells it was compared with */
     int found;                          /* a full-size texture was found: */
-    int source, cell;
+    int source, slot;
     int gain[3];                        /* its colours to the copy's (x 256): distance shading */
 } Match;
 
@@ -82,8 +88,8 @@ void texlod_vram_changed(int x, int y, int w, int h)
     for (int i = 0; i < s_source_count; i++) {
         const Source *s = &s_sources[i];
         int hit = overlaps(x, y, w, h, s->page_x, s->page_y, PAGE_TEXELS / 2, PAGE_TEXELS);
-        for (int cell = 0; cell < CELLS_PER_PAGE && !hit; cell++) {
-            hit = s->seen[cell] && overlaps(x, y, w, h, s->clut_x[cell], s->clut_y[cell], 256, 1);
+        for (int k = 0; k < s->slots && !hit; k++) {
+            hit = overlaps(x, y, w, h, s->clut_x[k], s->clut_y[k], 256, 1);
         }
         if (hit) {
             texlod_forget();
@@ -149,30 +155,35 @@ void texlod_note(const GpuPrim *p, const int *u, const int *v, int count)
             return;
         }
         s = &s_sources[s_source_count++];
-        memset(s->seen, 0, sizeof(s->seen));
-        memset(s->have_small, 0, sizeof(s->have_small));
+        s->slots = 0;
         s->page_x = p->page_x;
         s->page_y = p->page_y;
     }
-    if (!s->seen[cell]) {
-        /* (the first palette the cell is drawn with; the others are its
-         * shades: the pattern is the same) */
-        s->seen[cell] = 1;
-        s->clut_x[cell] = p->clut_x;
-        s->clut_y[cell] = p->clut_y;
+    for (int k = 0; k < s->slots; k++) {
+        if (s->cell[k] == cell && s->clut_x[k] == p->clut_x && s->clut_y[k] == p->clut_y) {
+            return;
+        }
+    }
+    if (s->slots < SLOTS_PER_PAGE) {
+        int k = s->slots++;
+        s->cell[k] = cell;
+        s->clut_x[k] = p->clut_x;
+        s->clut_y[k] = p->clut_y;
+        s->have_small[k] = 0;
         s_cell_count++;
     }
 }
 
-/* a source cell scaled down to half */
-static void make_small(Source *s, int cell)
+/* a source cell in one of its palettes, scaled down to half */
+static void make_small(Source *s, int slot)
 {
+    int cell = s->cell[slot];
     int cu = (cell % (PAGE_TEXELS / FULL)) * FULL, cv = (cell / (PAGE_TEXELS / FULL)) * FULL;
     for (int v = 0; v < SMALL; v++) {
         for (int u = 0; u < SMALL; u++) {
             int sum[3] = { 0, 0, 0 }, n = 0;
             for (int k = 0; k < 4; k++) {
-                uint16_t t = texel(s->page_x, s->page_y, 1, s->clut_x[cell], s->clut_y[cell],
+                uint16_t t = texel(s->page_x, s->page_y, 1, s->clut_x[slot], s->clut_y[slot],
                                    cu + 2 * u + (k & 1), cv + 2 * v + (k >> 1));
                 if (t) {
                     int c[3];
@@ -183,14 +194,14 @@ static void make_small(Source *s, int cell)
                     n++;
                 }
             }
-            uint8_t *out = s->small[cell][v * SMALL + u];
+            uint8_t *out = s->small[slot][v * SMALL + u];
             for (int c = 0; c < 3; c++) {
                 out[c] = (uint8_t) (n ? sum[c] / n : 0);
             }
             out[3] = n > 0;
         }
     }
-    s->have_small[cell] = 1;
+    s->have_small[slot] = 1;
 }
 
 /* Compares the copy's cell with every source cell; the best if close
@@ -217,23 +228,21 @@ static void find_match(Match *m)
             c[3] = t != 0;
         }
     }
-    int best = -1, best_cell = 0;
-    double best_corr = -1;
+    int best = -1, best_slot = 0;
+    double best_corr = -1, best_error = 0;
     long best_sum_a[3] = { 1, 1, 1 }, best_sum_b[3] = { 1, 1, 1 };
     for (int i = 0; i < s_source_count; i++) {
         Source *s = &s_sources[i];
-        for (int cell = 0; cell < CELLS_PER_PAGE; cell++) {
-            if (!s->seen[cell]) {
-                continue;
-            }
-            if (!s->have_small[cell]) {
-                make_small(s, cell);
+        for (int slot = 0; slot < s->slots; slot++) {
+            if (!s->have_small[slot]) {
+                make_small(s, slot);
             }
             long sum_a[3] = { 0, 0, 0 }, sum_b[3] = { 0, 0, 0 };
+            double aa[3] = { 0, 0, 0 }, bb[3] = { 0, 0, 0 }, ab[3] = { 0, 0, 0 };
             double la = 0, lb = 0, laa = 0, lbb = 0, lab = 0;
             int compared = 0;
             for (int k = 0; k < SMALL * SMALL; k++) {
-                const uint8_t *a8 = s->small[cell][k];
+                const uint8_t *a8 = s->small[slot][k];
                 const int *b = copy[k];
                 if (!a8[3] || !b[3]) {
                     continue;
@@ -242,6 +251,9 @@ static void find_match(Match *m)
                 for (int c = 0; c < 3; c++) {
                     sum_a[c] += a[c];
                     sum_b[c] += b[c];
+                    aa[c] += (double) a[c] * a[c];
+                    bb[c] += (double) b[c] * b[c];
+                    ab[c] += (double) a[c] * b[c];
                 }
                 double x = luma(a), y = luma(b);
                 la += x;
@@ -260,10 +272,21 @@ static void find_match(Match *m)
                 continue;                   /* (flat: nothing to compare) */
             }
             double corr = cov / sqrt(va * vb);
-            if (corr > best_corr) {
+            /* the colours: what is left of the copy's after the palette's
+             * are scaled by the mean ratio (per texel and channel) */
+            double error = 0;
+            for (int c = 0; c < 3; c++) {
+                double g = sum_a[c] ? (double) sum_b[c] / sum_a[c] : 1;
+                error += bb[c] - 2 * g * ab[c] + g * g * aa[c];
+            }
+            error /= n * 3;
+            /* another palette of the best cell (the same pattern): the closer colours */
+            int same = best == i && s->cell[slot] == s->cell[best_slot];
+            if (same ? error < best_error : corr > best_corr) {
                 best = i;
-                best_cell = cell;
-                best_corr = corr;
+                best_slot = slot;
+                best_corr = same && best_corr > corr ? best_corr : corr;
+                best_error = error;
                 memcpy(best_sum_a, sum_a, sizeof(sum_a));
                 memcpy(best_sum_b, sum_b, sizeof(sum_b));
             }
@@ -272,16 +295,19 @@ static void find_match(Match *m)
     m->sources = s_cell_count;
     m->found = best >= 0 && best_corr * 1000 >= MATCH_MIN_PERMILLE;
     m->source = best;
-    m->cell = best_cell;
+    m->slot = best_slot;
     for (int c = 0; c < 3; c++) {
         long g = best_sum_a[c] ? best_sum_b[c] * 256 / best_sum_a[c] : 256;
         m->gain[c] = (int) (g < 64 ? 64 : g > 512 ? 512 : g);
     }
     if (g_texlod_log < 20 && m->found) {
         g_texlod_log++;
-        psx_log("texlod: page %d,%d clut %d,%d cell %d,%d: %s %.3f (%d cells)", m->page_x,
-                m->page_y, m->clut_x, m->clut_y, m->cell_u, m->cell_v,
-                m->found ? "found" : "none", best_corr, s_cell_count);
+        const Source *s = &s_sources[best];
+        psx_log("texlod: page %d,%d clut %d,%d cell %d,%d: %s %.3f (%d cells) -> page %d,%d cell %d "
+                "clut %d,%d gain %d,%d,%d", m->page_x, m->page_y, m->clut_x, m->clut_y, m->cell_u,
+                m->cell_v, m->found ? "found" : "none", best_corr, s_cell_count, s->page_x, s->page_y,
+                s->cell[best_slot], s->clut_x[best_slot], s->clut_y[best_slot], m->gain[0], m->gain[1],
+                m->gain[2]);
     }
 }
 
@@ -335,11 +361,12 @@ int texlod_upgrade(GpuPrim *p, int *u, int *v, int count, int gain[3])
         return 0;
     }
     const Source *s = &s_sources[m->source];
-    int full_u = (m->cell % (PAGE_TEXELS / FULL)) * FULL, full_v = (m->cell / (PAGE_TEXELS / FULL)) * FULL;
+    int cell = s->cell[m->slot];
+    int full_u = (cell % (PAGE_TEXELS / FULL)) * FULL, full_v = (cell / (PAGE_TEXELS / FULL)) * FULL;
     p->page_x = s->page_x;
     p->page_y = s->page_y;
-    p->clut_x = s->clut_x[m->cell];
-    p->clut_y = s->clut_y[m->cell];
+    p->clut_x = s->clut_x[m->slot];
+    p->clut_y = s->clut_y[m->slot];
     p->depth = 1;
     memcpy(gain, m->gain, sizeof(m->gain));
     for (int k = 0; k < count; k++) {
