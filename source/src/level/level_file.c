@@ -66,7 +66,7 @@ int level_file_load(const char *path, LevelFile *out, char *error, int error_siz
 {
     memset(out, 0, sizeof(*out));
     out->type = LEVEL_TYPE_GAME_RULE;
-    int capacity = LEVEL_MAX_BYTES + HEADER_SIZE;
+    int capacity = LEVEL_MAX_BYTES + HEADER_SIZE + 2 * (8 + LEVEL_PATH_SIZE);
     uint8_t *buffer = (uint8_t *) malloc((size_t) capacity);
     if (!buffer) {
         fail(error, error_size, "Out of memory.");
@@ -107,6 +107,20 @@ int level_file_load(const char *path, LevelFile *out, char *error, int error_siz
         free(buffer);
         return 0;
     }
+    /* the tagged parts after the data */
+    for (int at = offset + size; offset && at + 8 <= length;) {
+        uint32_t part = read32(buffer + at + 4);
+        if (part > (uint32_t) (length - at - 8)) {
+            break;
+        }
+        char *dest = !memcmp(buffer + at, "NEXT", 4) ? out->next
+                     : !memcmp(buffer + at, "HIDN", 4) ? out->next_hidden : NULL;
+        if (dest && part < LEVEL_PATH_SIZE) {
+            memcpy(dest, buffer + at + 8, part);
+            dest[part] = 0;
+        }
+        at += 8 + (int) part;
+    }
     memmove(buffer, buffer + offset, (size_t) size);
     out->data = buffer;
     out->size = size;
@@ -115,7 +129,8 @@ int level_file_load(const char *path, LevelFile *out, char *error, int error_siz
 
 int level_file_save(const char *path, const LevelFile *level)
 {
-    int total = HEADER_SIZE + level->size;
+    int next = (int) strlen(level->next), hidden = (int) strlen(level->next_hidden);
+    int total = HEADER_SIZE + level->size + (next ? 8 + next : 0) + (hidden ? 8 + hidden : 0);
     uint8_t *buffer = (uint8_t *) calloc(1, (size_t) total);
     if (!buffer) {
         return 0;
@@ -131,9 +146,38 @@ int level_file_save(const char *path, const LevelFile *level)
     }
     strncpy((char *) buffer + 12, level->name, LEVEL_NAME_SIZE - 1);
     memcpy(buffer + HEADER_SIZE, level->data, (size_t) level->size);
+    int at = HEADER_SIZE + level->size;
+    for (int part = 0; part < 2; part++) {
+        const char *text = part ? level->next_hidden : level->next;
+        int n = (int) strlen(text);
+        if (n) {
+            memcpy(buffer + at, part ? "HIDN" : "NEXT", 4);
+            for (int i = 0; i < 4; i++) {
+                buffer[at + 4 + i] = (uint8_t) ((uint32_t) n >> (8 * i));
+            }
+            memcpy(buffer + at + 8, text, (size_t) n);
+            at += 8 + n;
+        }
+    }
     int ok = file_write(path, buffer, total);
     free(buffer);
     return ok;
+}
+
+void level_file_resolve(const char *from, const char *path, char *out, int out_size)
+{
+    int full = path[0] == '/' || path[0] == '\\' || (path[0] && path[1] == ':');
+    const char *slash = NULL;
+    for (const char *p = from; *p; p++) {
+        if (*p == '/' || *p == '\\') {
+            slash = p;
+        }
+    }
+    if (full || !slash) {
+        snprintf(out, (size_t) out_size, "%s", path);
+    } else {
+        snprintf(out, (size_t) out_size, "%.*s%s", (int) (slash - from + 1), from, path);
+    }
 }
 
 void level_file_free(LevelFile *level)

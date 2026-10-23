@@ -213,10 +213,29 @@ static bool file_dialog(bool save, const wchar_t *filter, const wchar_t *ext, st
     return true;
 }
 
-static bool write_level(const std::string &path)
+/* `link` (a full path) as the level file `from` keeps it: relative to its
+ * folder if it is in it or below, else full */
+static std::string relative_link(const std::string &from, const std::string &link)
+{
+    size_t slash = from.find_last_of("/" + std::string(1, (char) 92));
+    std::string folder = slash == std::string::npos ? "" : from.substr(0, slash + 1);
+    if (!folder.empty() && link.size() > folder.size()
+        && !_strnicmp(link.c_str(), folder.c_str(), folder.size())) {
+        return link.substr(folder.size());
+    }
+    return link;
+}
+
+/* `full_links`: the next levels as full paths (the copy the game plays) */
+static bool write_level(const std::string &path, bool full_links = false)
 {
     std::vector<uint8_t> data = g_ed.level.to_game();
     LevelFile lf = {};
+    const LevelSettings &st = g_ed.level.settings;
+    snprintf(lf.next, sizeof(lf.next), "%s",
+             full_links ? st.next_level.c_str() : relative_link(path, st.next_level).c_str());
+    snprintf(lf.next_hidden, sizeof(lf.next_hidden), "%s",
+             full_links ? st.next_hidden.c_str() : relative_link(path, st.next_hidden).c_str());
     lf.theme = g_ed.level.settings.theme;
     lf.type = g_ed.level.settings.bonus ? LEVEL_TYPE_BONUS : LEVEL_TYPE_NORMAL;
     snprintf(lf.name, sizeof(lf.name), "%s", g_ed.level.settings.name.c_str());
@@ -273,7 +292,7 @@ static void new_level()
 }
 
 /* `type`: level_file.h LevelType (the game's rule: a bonus level if no keys) */
-static void load_data(const std::vector<uint8_t> &data, int theme, int type, const std::string &name,
+static bool load_data(const std::vector<uint8_t> &data, int theme, int type, const std::string &name,
                       const std::string &path)
 {
     Level fresh;
@@ -282,7 +301,7 @@ static void load_data(const std::vector<uint8_t> &data, int theme, int type, con
     std::string error;
     if (!fresh.from_game(data.data(), (int) data.size(), &error)) {
         MessageBoxW(s_hwnd, wide(error).c_str(), L"Roll Away level editor", MB_ICONERROR);
-        return;
+        return false;
     }
     fresh.update_paths();
     fresh.settings.bonus = type == LEVEL_TYPE_GAME_RULE ? fresh.count_things(THING_KEY) == 0
@@ -299,6 +318,7 @@ static void load_data(const std::vector<uint8_t> &data, int theme, int type, con
     }
     update_title();
     view_focus();
+    return true;
 }
 
 void editor_open_path(const char *path)
@@ -312,9 +332,19 @@ void editor_open_path(const char *path)
     std::vector<uint8_t> data(lf.data, lf.data + lf.size);
     std::string name = lf.name;
     int theme = lf.theme, type = lf.type;
+    char next[LEVEL_PATH_SIZE] = "", hidden[LEVEL_PATH_SIZE] = "";
+    if (lf.next[0]) {
+        level_file_resolve(path, lf.next, next, sizeof(next));
+    }
+    if (lf.next_hidden[0]) {
+        level_file_resolve(path, lf.next_hidden, hidden, sizeof(hidden));
+    }
     level_file_free(&lf);
-    load_data(data, theme, type, name, path);
-    editor_say("Opened %s", base_name(path).c_str());
+    if (load_data(data, theme, type, name, path)) {
+        g_ed.level.settings.next_level = next;
+        g_ed.level.settings.next_hidden = hidden;
+        editor_say("Opened %s", base_name(path).c_str());
+    }
 }
 
 static void open_file()
@@ -377,7 +407,7 @@ static void play()
     wchar_t temp[MAX_PATH];
     GetTempPathW(MAX_PATH, temp);
     std::string path = utf8(temp) + "roll_away_editor_test.rlv";
-    if (!write_level(path)) {
+    if (!write_level(path, true)) {
         MessageBoxW(s_hwnd, L"The level could not be written for the game.", L"Roll Away level editor",
                     MB_ICONERROR);
         return;
@@ -571,6 +601,53 @@ static void link_row(const char *label, Link *link, int pick, const char *tip)
     ImGui::PopID();
 }
 
+/* the level an exit leads to (the same for all exits of a kind); TRUE if
+ * that level was opened (the level shown is another now) */
+static bool next_level_row(bool hidden)
+{
+    std::string &link = hidden ? g_ed.level.settings.next_hidden : g_ed.level.settings.next_level;
+    ImGui::PushID(hidden ? "next_hidden" : "next");
+    ImGui::Text("Next level:");
+    ImGui::SameLine();
+    if (link.empty()) {
+        ImGui::TextDisabled(hidden ? "as the exit's" : "none (played again)");
+    } else {
+        ImGui::TextColored(ACCENT, "%s", base_name(link).c_str());
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("%s", link.c_str());
+        }
+    }
+    if (ImGui::Button("Choose...")) {
+        std::string chosen = link.empty() ? g_ed.path : link;
+        if (file_dialog(false, FILE_FILTER, L"rlv", &chosen)) {
+            editor_snapshot();
+            link = chosen;
+            editor_changed();
+            if (!g_ed.path.empty() && !_stricmp(chosen.c_str(), g_ed.path.c_str())) {
+                editor_say("The exit leads back to this level.");
+            }
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Clear") && !link.empty()) {
+        editor_snapshot();
+        link.clear();
+        editor_changed();
+    }
+    if (!link.empty()) {
+        ImGui::SameLine();
+        if (ImGui::Button("Open it") && ask_save_changes()) {
+            std::string target = link;
+            ImGui::PopID();
+            editor_open_path(target.c_str());
+            return true;
+        }
+    }
+    ImGui::TextDisabled(hidden ? "(every hidden exit of this level)" : "(every exit of this level)");
+    ImGui::PopID();
+    return false;
+}
+
 static void selection_panel()
 {
     Level &lv = g_ed.level;
@@ -738,6 +815,10 @@ static void selection_panel()
                 t.w[3] = on ? 1 : 2;
                 editor_changed();
             }
+        }
+        if ((t.id() == THING_EXIT || t.id() == THING_HIDDEN_EXIT)
+            && next_level_row(t.id() == THING_HIDDEN_EXIT)) {
+            return;
         }
         if (t.id() == THING_TRANSPORTER) {
             link_row("Destination", &t.target, PICK_TARGET, "Click the transporter it takes the ball to.");
@@ -1130,6 +1211,13 @@ void editor_frame(int width, int height)
     keys();
     menu_bar();
     std::vector<Level::Problem> problems = g_ed.level.check();
+    for (int hidden = 0; hidden < 2; hidden++) {
+        const std::string &link = hidden ? g_ed.level.settings.next_hidden : g_ed.level.settings.next_level;
+        if (!link.empty() && GetFileAttributesW(wide(link).c_str()) == INVALID_FILE_ATTRIBUTES) {
+            problems.push_back({ false, std::string(hidden ? "The hidden exit" : "The exit") +
+                                 " leads to a level that is missing: " + base_name(link), -1 });
+        }
+    }
     float top = ImGui::GetFrameHeight();
     float bottom = ImGui::GetFrameHeight() + 6;
     left_panel(top, height - top - bottom);

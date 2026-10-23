@@ -61,6 +61,28 @@ void hook_custom_level_file(void)
 
 /* (custom_level.c) */
 int custom_level_type(void);
+void custom_level_loading(void);
+void custom_level_advance(int how);
+
+/*
+ * 0x40538 (USA), just before the game unpacks a level from the world's
+ * .PAK in memory: with levels of the player's, the entries are pointed
+ * at the one played now.
+ */
+void hook_custom_level_loading(void)
+{
+    custom_level_loading();
+}
+
+/*
+ * 0x424F4 (USA), the game moves on after a level: v1 is how it ended
+ * (> 0 finished, 3 by the hidden exit); the player's chain of levels
+ * moves on too.
+ */
+void hook_custom_level_advance(void)
+{
+    custom_level_advance((int) GPR[3]);
+}
 
 /*
  * 0x27BD4 and 0x35FC8 (USA), as a level is set up: the game makes it a

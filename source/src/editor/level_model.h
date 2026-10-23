@@ -145,6 +145,8 @@ struct LevelSettings {
     int theme = 0;                      /* the world: level/level_file.h */
     int seconds = 99;                   /* the starting time */
     bool bonus = false;                 /* a bonus level (else a normal one) */
+    std::string next_level;             /* the level after the exit (a full path, "" none) */
+    std::string next_hidden;            /* ... after the hidden exit */
     bool hidden = false;                /* the level flags (property 9) */
     bool reverse_invisible = false;
 };

@@ -12,6 +12,10 @@
  *   - at word 39304: number of blocks, 0, number of properties;
  *   - the properties, 128 words each (word 0 the kind); the level's
  *     information (kind 666: time) follows them, not counted.
+ *
+ * After the data a .rlv may have tagged parts (4-letter tag, 32-bit
+ * length, bytes): "NEXT" the level after the exit, "HIDN" the level after
+ * the hidden exit - UTF-8 paths, relative to the file's folder (or full).
  */
 #ifndef LEVEL_LEVEL_FILE_H
 #define LEVEL_LEVEL_FILE_H
@@ -40,6 +44,7 @@ extern const char *const g_level_theme_names[LEVEL_THEME_COUNT];
 #define LEVEL_FILE_MAGIC        "RALV"
 #define LEVEL_FILE_VERSION      1
 #define LEVEL_NAME_SIZE         48
+#define LEVEL_PATH_SIZE         520
 
 /* LevelFile.type: how the game plays the level */
 enum LevelType {
@@ -52,6 +57,8 @@ typedef struct {
     int theme;                          /* 0..LEVEL_THEME_COUNT - 1 */
     int type;                           /* enum LevelType */
     char name[LEVEL_NAME_SIZE];         /* UTF-8, may be empty */
+    char next[LEVEL_PATH_SIZE];         /* the level after the exit ("" none) */
+    char next_hidden[LEVEL_PATH_SIZE];  /* ... after the hidden exit */
     uint8_t *data;                      /* the game's level data */
     int size;                           /* bytes */
 } LevelFile;
@@ -63,6 +70,10 @@ int level_file_load(const char *path, LevelFile *out, char *error, int error_siz
 int level_file_save(const char *path, const LevelFile *level);
 
 void level_file_free(LevelFile *level);
+
+/* `path` of a level referred to by the level file `from` (a relative path
+ * is from `from`'s folder), into `out`. */
+void level_file_resolve(const char *from, const char *path, char *out, int out_size);
 
 /* TRUE if `data` is level data the game can read: the counts agree with
  * the size, every cell refers to an existing property. */

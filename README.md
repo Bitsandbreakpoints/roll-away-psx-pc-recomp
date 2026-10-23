@@ -176,6 +176,8 @@ launcher) is a 3D level editor.
 - **The world's own look**: the editor reads the block textures from your
   disc, and the level is played in the world you choose (its textures, sky
   and music).
+- **A series of levels**: on an exit you choose the level that comes next
+  (the hidden exit can lead elsewhere), also in another world.
 - **Play at once**: **Play** (F5) starts the game straight into the level.
   Saved levels (`.rlv`) are played with **PLAY OWN LEVEL** in the launcher
   or by dropping them on its window.

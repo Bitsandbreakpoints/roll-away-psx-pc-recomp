@@ -31,6 +31,8 @@ skivan. Spelets regler kontrolleras medan man bygger. Banan sparas som
 en bana utan nycklar till bonusbana); "Play" (F5) startar spelet direkt i banan, och i launchern spelar
 PLAY OWN LEVEL (eller en `.rlv` som dras in i fönstret) en sparad bana.
 File > Open a level of the game öppnar spelets egna banor från skivan.
+På en utgång väljer man vilken bana som kommer härnäst (också i en annan
+värld), så att egna banor kan bli en hel serie.
 
 Spelet själv ändras inte: när en egen bana spelas byter porten ut
 innehållet i världarnas `.PAK`-filer när de läses från skivan (varje bana
