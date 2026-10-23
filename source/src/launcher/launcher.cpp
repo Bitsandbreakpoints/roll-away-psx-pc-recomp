@@ -451,7 +451,7 @@ int settings_screen(void)
 #define MARGIN                  52.0f
 #define TAG_SIZE                15.0f
 #define TITLE_SIZE              66.0f
-#define MENU_SIZE               30.0f
+#define MENU_SIZE               24.0f
 #define MENU_WIDTH              360.0f
 #define PAGE_TITLE_SIZE         40.0f
 #define TAB_SIZE                22.0f
@@ -698,7 +698,7 @@ static int menu_page(float w, float h)
     int action = LAUNCHER_STAY;
 
     title(margin, margin * 0.9f);
-    ImGui::SetCursorScreenPos(ImVec2(margin - 18 * scale, h * 0.37f));
+    ImGui::SetCursorScreenPos(ImVec2(margin - 18 * scale, h * 0.40f));
     if (s_focus && disc_playable()) {
         ImGui::SetKeyboardFocusHere();
     }
