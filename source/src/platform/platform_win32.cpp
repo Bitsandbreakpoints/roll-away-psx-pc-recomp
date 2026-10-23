@@ -495,3 +495,38 @@ int platform_open_file_dialog(char *path, int size)
     wide_to_utf8(file, path, size);
     return 1;
 }
+
+int platform_open_level_dialog(char *path, int size)
+{
+    wchar_t file[MAX_PATH] = L"";
+    OPENFILENAMEW ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = s_window;
+    ofn.lpstrFilter = L"Roll Away level (*.rlv)\0*.rlv\0All files\0*.*\0";
+    ofn.lpstrFile = file;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrTitle = L"Choose a level to play (made with the level editor)";
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    if (!GetOpenFileNameW(&ofn)) {
+        return 0;
+    }
+    wide_to_utf8(file, path, size);
+    return 1;
+}
+
+int platform_start_program(const char *exe_name)
+{
+    wchar_t folder[MAX_PATH], exe[MAX_PATH], name[MAX_PATH];
+    GetModuleFileNameW(NULL, folder, MAX_PATH);
+    wchar_t *slash = wcsrchr(folder, L'\\');
+    if (slash) {
+        slash[1] = 0;
+    }
+    utf8_to_wide(exe_name, name, MAX_PATH);
+    _snwprintf(exe, MAX_PATH, L"%ls%ls", folder, name);
+    exe[MAX_PATH - 1] = 0;
+    if (GetFileAttributesW(exe) == INVALID_FILE_ATTRIBUTES) {
+        return 0;
+    }
+    return (INT_PTR) ShellExecuteW(s_window, L"open", exe, NULL, folder, SW_SHOWNORMAL) > 32;
+}

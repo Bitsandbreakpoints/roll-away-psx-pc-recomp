@@ -3,7 +3,7 @@
 
     python tools/package.py [--scan-only]
 
-The zip holds roll_away.exe, the player's README (README.txt) and the
+The zip holds roll_away.exe, the level editor (roll_away_editor.exe), the player's README (README.txt) and the
 licences of the third-party code built into the exe.  It never holds
 anything from the game's disc: before packing, the exe is searched for
 every 64-byte block (that is not mostly one repeated value) of the discs'
@@ -23,6 +23,7 @@ import zipfile
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXE = os.path.join(HERE, 'build', 'roll_away.exe')
+EDITOR_EXE = os.path.join(HERE, 'build', 'roll_away_editor.exe')
 OUT_DIR = os.path.join(HERE, 'build', 'package')
 ZIP_NAME = 'roll-away-pc.zip'
 FOLDER = 'Roll Away PC'
@@ -87,6 +88,20 @@ under SETTINGS. The settings are kept in settings.ini next to the program.
 The game saves to a memory card, kept in roll_away_card1.mcd next to the
 program (the format emulators use). No BIOS is needed.
 
+Your own levels
+---------------
+roll_away_editor.exe (LEVEL EDITOR in the launcher) is a 3D level editor:
+put blocks (they snap onto the side you click), the start, keys, the exit,
+coins, gems, fruit, power-ups, hazards, transporters, buttons, moving
+blocks and lasers, choose the world and the time, and save the level as a
+.rlv file. The editor shows the world's own block textures, read from your
+disc. "Play" (F5) starts the game with the level at once; in the launcher,
+PLAY OWN LEVEL (or dropping a .rlv on the window) plays a saved level.
+File > Open a level of the game opens any of the game's levels from your
+disc to look at or to start from. The game's rules are checked as you
+build (one start, things only on open sides, the exit opens when all keys
+are taken, a level without keys is played as a bonus level).
+
 Requires Windows 10 or later.
 
 The licences of the third-party code are in the "licenses" folder.
@@ -134,18 +149,24 @@ def license_text(source, start):
 
 def main():
     exe = read(EXE)
-    hits = scan(exe)
-    for path, offset, at in hits[:20]:
-        print(f'  {os.path.relpath(path, HERE)} +{offset:#x} found at exe offset {at:#x}')
-    if hits:
-        sys.exit(f'{len(hits)} blocks of disc files are in the exe: not packed')
-    print('scan: nothing from the disc in the exe')
+    editor = read(EDITOR_EXE) if os.path.exists(EDITOR_EXE) else None
+    for name, data in (('roll_away.exe', exe), ('roll_away_editor.exe', editor)):
+        if data is None:
+            continue
+        hits = scan(data)
+        for path, offset, at in hits[:20]:
+            print(f'  {os.path.relpath(path, HERE)} +{offset:#x} found at {name} offset {at:#x}')
+        if hits:
+            sys.exit(f'{len(hits)} blocks of disc files are in {name}: not packed')
+        print(f'scan: nothing from the disc in {name}')
     if '--scan-only' in sys.argv:
         return
     os.makedirs(OUT_DIR, exist_ok=True)
     out = os.path.join(OUT_DIR, ZIP_NAME)
     with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
         z.writestr(f'{FOLDER}/roll_away.exe', exe)
+        if editor:
+            z.writestr(f'{FOLDER}/roll_away_editor.exe', editor)
         z.writestr(f'{FOLDER}/README.txt', README.replace('\n', '\r\n'))
         z.writestr(f'{FOLDER}/licenses/THIRD_PARTY.md', read(os.path.join(HERE, 'THIRD_PARTY.md')))
         for name, source, start in LICENSES:

@@ -8,6 +8,7 @@
  * window.
  */
 #include <windows.h>
+#include <shellapi.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +23,8 @@
 #include "disc/disc.h"
 #include "runtime/system.h"
 #include "runtime/kanji.h"
+#include "runtime/custom_level.h"
+#include "runtime/runtime.h"
 #include "platform/font.h"
 #include "psx/gte.h"
 #include "psx/gpu.h"
@@ -151,12 +154,28 @@ static void scripted_pokes(void)
     }
 }
 
+/* A level of the player's: the confirm button (X, KulaQuest O) is pressed
+ * for 3 frames of every 20 until the game loads the level - through the
+ * intro, the title and the menus straight into an Arcade game. */
+static int custom_level_buttons(void)
+{
+    static int scripted = -1;
+    if (scripted < 0) {
+        scripted = GetEnvironmentVariableA("RA_INPUT", NULL, 0) != 0;
+    }
+    if (scripted || !custom_level_active() || custom_level_started() || s_frame % 20 >= 3) {
+        return 0;
+    }
+    bool japan = g_rt_module && !strcmp(g_rt_module->disc_name, "SCPS_100.64");
+    return japan ? 0x2000 : 0x4000;
+}
+
 /* A controller's buttons: the settings, plus RA_INPUT for player 1. */
 static int read_pad(int port)
 {
     int buttons = controls_psx_buttons(port);
     if (port == 0) {
-        int scripted = scripted_buttons();
+        int scripted = scripted_buttons() | custom_level_buttons();
         if (scripted) {
             buttons = (buttons < 0 ? 0 : buttons) | scripted;
         }
@@ -259,6 +278,15 @@ static void debug_dump_vram(void)
             gpu_debug_dump(name);
             snprintf(name, sizeof(name), "shot_%d.bmp", s_frame);
             dump_picture(name);
+            /* (RA_RAM_DUMP=1: the 2 MB of PS1 RAM too, ram_<frame>.bin) */
+            if (GetEnvironmentVariableA("RA_RAM_DUMP", NULL, 0)) {
+                snprintf(name, sizeof(name), "ram_%d.bin", s_frame);
+                FILE *f = fopen(name, "wb");
+                if (f) {
+                    fwrite(rt_pointer(0x80000000u), 1, 0x200000, f);
+                    fclose(f);
+                }
+            }
         }
         while (*p && *p != ',') {
             p++;
@@ -557,6 +585,7 @@ static void run_game(void)
         platform_message(GAME_TITLE, "The disc cannot be read.");
         return;
     }
+    custom_level_prepare();
     settings_save();
     launcher_set_in_game(1);
     show_game_window();
@@ -638,6 +667,44 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
     launcher_init();
     psx_set_pad_reader(read_pad);
     kanji_set_renderer(font_render_sjis);   /* (the dialogue's font) */
+    /* `roll_away.exe --level <file.rlv>` (the level editor's "Play"): that
+     * level at once, and the program closes when the game is left;
+     * (tests: RA_LEVEL=<file.rlv> plays it too) */
+    int argc = 0;
+    wchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    char level_path[MAX_PATH * 3] = "";
+    int level_only = 0;
+    for (int i = 1; argv && i + 1 < argc; i++) {
+        if (!wcscmp(argv[i], L"--level")) {
+            WideCharToMultiByte(CP_UTF8, 0, argv[i + 1], -1, level_path, sizeof(level_path),
+                                NULL, NULL);
+            level_only = 1;
+        }
+    }
+    if (argv) {
+        LocalFree(argv);
+    }
+    int from_test = !level_path[0]
+                    && GetEnvironmentVariableA("RA_LEVEL", level_path, sizeof(level_path));
+    if (level_path[0]) {
+        char error[256];
+        if (!custom_level_set(level_path, error, sizeof(error))) {
+            /* (tests: only logged, no box waits for a click) */
+            psx_log("%s: %s", level_path, error);
+            if (!from_test) {
+                platform_message(GAME_TITLE, error);
+            }
+            level_only = 0;
+        }
+    }
+    if (level_only) {
+        if (g_settings_pc.disc_path[0]) {
+            run_game();
+        } else {
+            platform_message(GAME_TITLE, "Choose your Roll Away disc in the launcher first.");
+        }
+        s_quit = 1;
+    }
     /* debugging: RA_AUTOSTART=1 starts the game right away */
     if (GetEnvironmentVariableA("RA_AUTOSTART", NULL, 0) && g_settings_pc.disc_path[0]) {
         run_game();
@@ -660,6 +727,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         if (action == LAUNCHER_PLAY) {
             settings_save();
             run_game();
+        } else if (action == LAUNCHER_PLAY_LEVEL) {
+            settings_save();
+            run_game();
+            custom_level_set(NULL, NULL, 0);    /* (PLAY: the game's own levels again) */
         } else if (action == LAUNCHER_QUIT) {
             break;
         }

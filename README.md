@@ -157,6 +157,32 @@ respective owners.*
 - **Memory card in a file**: `roll_away_card1.mcd` next to the program, in
   the raw format emulators use. No BIOS needed.
 
+## Level editor
+
+Make your own levels: `roll_away_editor.exe` (**LEVEL EDITOR** in the
+launcher) is a 3D level editor.
+
+- **Blocks snap together**: click the side of a block and the new block
+  sits right there; drag to build a row, a floor or a wall.
+- **Everything the game has**: normal, fire, ice, invisible and acid
+  blocks, moving, crumbling and flashing blocks, lasers, and on the blocks
+  the start, keys, the exit, coins, gems, fruit, power-ups, spikes,
+  patches, bounce pads, arrows, transporters, buttons and enemies.
+- **The game's rules** are checked while you build: one start, things
+  only on open sides, the exit opens when all keys are taken, a level
+  without keys is played as a bonus level.
+- **The world's own look**: the editor reads the block textures from your
+  disc, and the level is played in the world you choose (its textures, sky
+  and music).
+- **Play at once**: **Play** (F5) starts the game straight into the level.
+  Saved levels (`.rlv`) are played with **PLAY OWN LEVEL** in the launcher
+  or by dropping them on its window.
+- **Learn from the masters**: File > Open a level of the game opens any of
+  the game's levels from your disc.
+
+The game itself is not changed: when you play your own level, the port
+serves it in place of the game's levels as they are read from the disc.
+
 ## Controls
 
 Plug-and-play with modern controllers!
@@ -185,6 +211,7 @@ Everything stays in the program's folder:
 - `settings.ini`: the settings.
 - `roll_away_card1.mcd`: the memory card in slot 1.
 - `roll_away.log`: a log for troubleshooting.
+- `level_editor.ini`: the level editor's disc, if not the launcher's.
 
 ## FAQ
 

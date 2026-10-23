@@ -1,0 +1,7 @@
+/*
+ * editor.rc - files built into the level editor: the program's icon
+ * (our own, tools/make_icon.py).  Nothing from the game disc.
+ */
+#include "resources.h"
+
+IDI_APP ICON "assets/icon/roll_away.ico"

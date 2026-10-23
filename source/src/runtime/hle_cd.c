@@ -26,6 +26,7 @@
 #include "runtime/runtime.h"
 #include "runtime/irq.h"
 #include "disc/disc.h"
+#include "runtime/custom_level.h"
 #include "psx/xa.h"
 #include "psx/log.h"
 
@@ -545,7 +546,8 @@ void hle_CdRead(void)
     }
     for (int i = 0; i < sectors; i++) {
         void *p = rt_pointer(buf + (uint32_t) i * DISC_SECTOR_DATA);
-        if (!p || !disc_read_sectors((uint32_t) s_position, 1, p)) {
+        if (!p || (!custom_level_read_sector((uint32_t) s_position, p)
+                   && !disc_read_sectors((uint32_t) s_position, 1, p))) {
             psx_log("CdRead: cannot read sector %d to %08X", s_position, buf);
             RETURN(0);
             return;

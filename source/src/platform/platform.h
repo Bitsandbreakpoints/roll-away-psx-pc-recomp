@@ -72,6 +72,14 @@ int platform_take_dropped_file(char *path, int size);
 /* "Open file" dialog for a disc image.  FALSE if cancelled. */
 int platform_open_file_dialog(char *path, int size);
 
+/* "Open file" dialog for a level of the level editor (.rlv).  FALSE if
+ * cancelled. */
+int platform_open_level_dialog(char *path, int size);
+
+/* Starts a program in the exe's folder (e.g. "roll_away_editor.exe");
+ * FALSE if it is missing. */
+int platform_start_program(const char *exe_name);
+
 /* The launcher's own window controls (splash mode): moving the window
  * while the left mouse button is held, minimising it. */
 void platform_begin_window_drag(void);

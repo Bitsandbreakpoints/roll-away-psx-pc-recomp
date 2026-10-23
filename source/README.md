@@ -19,6 +19,23 @@ pausar och öppnar en meny med inställningarna och knapparna Resume, Back
 to launcher och Quit game; Tab snabbspolar och Esc går tillbaka till
 launchern. Se `PLAN.md`.
 
+## Baneditor
+`build/roll_away_editor.exe` (LEVEL EDITOR i launchern) är en egen app för
+att göra banor i 3D: block som fäster mot sidan man klickar på (dra för en
+rad, ett golv eller en vägg), alla blocktyper (eld, is, osynliga, syra,
+rörliga, smulande, blinkande, lasrar) och allt som kan ligga på blocken
+(start, nycklar, utgång, mynt, ädelstenar, frukt, power-ups, faror,
+teleportrar, knappar, fiender). Världens egna blocktexturer läses från
+skivan. Spelets regler kontrolleras medan man bygger. Banan sparas som
+`.rlv`; "Play" (F5) startar spelet direkt i banan, och i launchern spelar
+PLAY OWN LEVEL (eller en `.rlv` som dras in i fönstret) en sparad bana.
+File > Open a level of the game öppnar spelets egna banor från skivan.
+
+Spelet själv ändras inte: när en egen bana spelas byter porten ut
+innehållet i världarnas `.PAK`-filer när de läses från skivan (varje bana
+blir den egna), väljer banans värld och trycker X genom intro och menyer
+tills spelet är igång.
+
 ## Du behöver din egen skiva
 Varken källkoden eller programmet innehåller grafik, ljud, musik, filmer,
 text eller annan data från spelet. Allt läses från din egen skiva av
@@ -40,14 +57,15 @@ build.bat --disc "D:\Spel\Roll Away (USA).chd" --disc "D:\Spel\Kula World (Europ
 ```
 Första gången laddas kompilatorn (llvm-mingw) och ninja ner till `tools/`
 (SHA256-kontrollerade). Skivornas sökvägar sparas, så därefter räcker
-`build.bat`. Resultatet blir `build/roll_away.exe`. `run.bat` bygger
+`build.bat`. Resultatet blir `build/roll_away.exe` och
+`build/roll_away_editor.exe`. `run.bat` bygger
 och startar; `build.bat --debug` ger ett felsökningsbygge. Ligger
 skivorna som `Roll*Away*`, `Kula*World*` eller `Kula*Quest*` (`.chd`,
 `.cue`, `.iso`) i projektmappen hittas de utan `--disc`.
 
 Paket för spelare: `python tools/package.py` ger
-`build/package/roll-away-pc.zip` (exe, README.txt, licenser), efter
-en kontroll av att exe-filen inte innehåller något från skivan.
+`build/package/roll-away-pc.zip` (spelet, editorn, README.txt, licenser),
+efter en kontroll av att exe-filerna inte innehåller något från skivan.
 
 ## Hur det fungerar
 | Del | Var | Vad |
@@ -57,6 +75,7 @@ en kontroll av att exe-filen inte innehåller något från skivan.
 | Körmiljö | `src/runtime/` | CPU-register, minne, avbrott/VSync, BIOS-funktioner, ersättningar för LIBGPU, LIBCD (CD-enhet i realtid, XA, St*-strömning), LIBPRESS, LIBPAD, LIBMCRD |
 | PS1-hårdvara i mjukvara | `src/psx/` | GPU (med högupplöst kopia), GTE, SPU, MDEC, XA-ADPCM |
 | PC | `src/platform/`, `src/launcher/`, `src/disc/` | fönster, Direct3D 11, XInput, XAudio2, launcher, skivläsare (bin/cue/chd/iso) |
+| Egna banor | `src/level/`, `src/runtime/custom_level.c`, `src/editor/` | `.rlv`-formatet, banan i spelet, baneditorn |
 
 Spelets RAM ligger på sin egen adress (0x80000000) i en 32-bitarsprocess,
 och spelet (länkat till KUSEG, 0x00010000) når det genom en mask, så en
@@ -78,6 +97,9 @@ använda medan de körs.
   (`tools/emulator/duckstation`, BIOS `scph5502.bin` i projektroten) med
   differensbilder.
 - `python tests/window_shot.py build/test/launcher.png`: launcherns fönster.
+- `python tests/editor_shot.py <ut.png> [bana]` och
+  `python tests/editor_drive.py [bana] "click X Y; drag …; key 1; shot ut.png"`:
+  baneditorns fönster, styrt med fönstermeddelanden.
 
 Felsökning med miljövariabler: `RA_AUTOSTART=1`, `RA_QUIT=1`,
 `RA_INPUT=<bildruta>[-<sista>]:<knapp>,…`, `RA_LEAVE=<bildruta>`,

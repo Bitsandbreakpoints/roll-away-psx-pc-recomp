@@ -28,3 +28,33 @@ void hook_save_every_level(void)
         GPR[2] = GPR[4];
     }
 }
+
+/* (custom_level.c) */
+int custom_level_world(void);
+
+/*
+ * 0x403B8 and 0x403D4 (USA), just after the game has read the world it
+ * is to load next (a0): with a level of the player's, that level's world
+ * is loaded instead, for its textures, sky and music.
+ */
+void hook_custom_level_world(void)
+{
+    int world = custom_level_world();
+    if (world >= 0) {
+        GPR[4] = (uint32_t) world;
+    }
+}
+
+/*
+ * 0x4CCF8 (USA), the start of the function that loads a file of a world
+ * (a0 the world, a1 the kind: 0 .TGI, 1 .SFX, 2 .PAK, 3 .GGI, 4 FI.PAK):
+ * with a level of the player's, the textures and levels are its world's
+ * (.SFX and .GGI are the first world's alone, for all of them).
+ */
+void hook_custom_level_file(void)
+{
+    int world = custom_level_world();
+    if (world >= 0 && GPR[4] < 10 && (GPR[5] == 0 || GPR[5] == 2 || GPR[5] == 4)) {
+        GPR[4] = (uint32_t) world;
+    }
+}

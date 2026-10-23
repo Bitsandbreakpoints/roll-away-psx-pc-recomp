@@ -9,6 +9,7 @@
 enum LauncherAction {
     LAUNCHER_STAY = 0,
     LAUNCHER_PLAY,
+    LAUNCHER_PLAY_LEVEL,                /* a level of the player's (custom_level_set() done) */
     LAUNCHER_QUIT
 };
 

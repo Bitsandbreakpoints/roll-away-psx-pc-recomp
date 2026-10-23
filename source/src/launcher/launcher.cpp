@@ -14,6 +14,7 @@
 #include <float.h>
 #include "imgui.h"
 #include "launcher/launcher.h"
+#include "runtime/custom_level.h"
 #include "launcher/settings.h"
 #include "launcher/controls.h"
 #include "platform/platform.h"
@@ -660,6 +661,18 @@ static void disc_status(float x, float y)
                   name);
 }
 
+/* A level of the player's (.rlv) for the next game; FALSE (said why) if
+ * it cannot be read. */
+static bool play_level(const char *path)
+{
+    char error[256];
+    if (!custom_level_set(path, error, sizeof(error))) {
+        platform_message("Roll Away", error);
+        return false;
+    }
+    return true;
+}
+
 static void choose_disc_dialog(void)
 {
     char path[SETTINGS_PATH_MAX];
@@ -685,7 +698,7 @@ static int menu_page(float w, float h)
     int action = LAUNCHER_STAY;
 
     title(margin, margin * 0.9f);
-    ImGui::SetCursorScreenPos(ImVec2(margin - 18 * scale, h * 0.47f));
+    ImGui::SetCursorScreenPos(ImVec2(margin - 18 * scale, h * 0.37f));
     if (s_focus && disc_playable()) {
         ImGui::SetKeyboardFocusHere();
     }
@@ -697,6 +710,18 @@ static int menu_page(float w, float h)
         ImGui::SetKeyboardFocusHere();
     }
     s_focus = 0;
+    if (menu_item("PLAY OWN LEVEL", MENU_SIZE * scale, MENU_WIDTH * scale, disc_playable(), false)) {
+        char path[SETTINGS_PATH_MAX];
+        if (platform_open_level_dialog(path, sizeof(path)) && play_level(path)) {
+            action = LAUNCHER_PLAY_LEVEL;
+        }
+    }
+    ImGui::SetCursorScreenPos(ImVec2(margin - 18 * scale, ImGui::GetCursorScreenPos().y));
+    if (menu_item("LEVEL EDITOR", MENU_SIZE * scale, MENU_WIDTH * scale, true, false)
+        && !platform_start_program("roll_away_editor.exe")) {
+        platform_message("Roll Away", "The level editor (roll_away_editor.exe) is not next to the game.");
+    }
+    ImGui::SetCursorScreenPos(ImVec2(margin - 18 * scale, ImGui::GetCursorScreenPos().y));
     if (menu_item("CHOOSE DISC", MENU_SIZE * scale, MENU_WIDTH * scale, true, false)) {
         choose_disc_dialog();
     }
@@ -805,7 +830,15 @@ int launcher_frame(void)
     int iw, ih;
 
     if (platform_take_dropped_file(dropped, sizeof(dropped))) {
-        choose_disc(dropped);
+        /* a level dropped on the window is played, anything else is a disc */
+        size_t n = strlen(dropped);
+        if (n > 4 && !_stricmp(dropped + n - 4, ".rlv")) {
+            if (disc_playable() && play_level(dropped)) {
+                action = LAUNCHER_PLAY_LEVEL;
+            }
+        } else {
+            choose_disc(dropped);
+        }
     }
     platform_client_size(&iw, &ih);
     float w = (float) iw, h = (float) ih;

@@ -31,6 +31,10 @@ WINDRES = os.path.join(BIN, 'i686-w64-mingw32-windres.exe')
 
 OUT = 'build/roll_away.exe'
 SOURCE_DIRS = ['src']
+# the level editor: a program of its own (src/editor/), next to the game
+EDITOR_OUT = 'build/roll_away_editor.exe'
+EDITOR_DIR = 'src/editor'
+EDITOR_SHARED = ['src/level/level_file.c', 'src/platform/files.cpp', 'src/disc/disc.cpp', 'src/disc/sha1.c']
 # Dear ImGui (MIT): core + Win32/D3D11 backends
 EXTRA_SOURCES = ['third_party/imgui/' + f for f in (
     'imgui.cpp', 'imgui_draw.cpp', 'imgui_tables.cpp', 'imgui_widgets.cpp',
@@ -38,7 +42,8 @@ EXTRA_SOURCES = ['third_party/imgui/' + f for f in (
 # libchdr (BSD-3) with zstd, LZMA, miniz, FLAC: one unity file, own flags
 CHDR_DIR = 'third_party/libchdr'
 CHDR_SOURCES = [CHDR_DIR + '/unity.c', CHDR_DIR + '/src/libchdr_codec_avhuff.c']
-CHDR_CFLAGS = ('-O2 -w -std=gnu11 ' + ' '.join('-I' + CHDR_DIR + '/' + d for d in (
+# (deflate too: custom levels are packed as the game's .PAK entries)
+CHDR_CFLAGS = ('-O2 -w -std=gnu11 -DMINIZ_DEFLATE_APIS ' + ' '.join('-I' + CHDR_DIR + '/' + d for d in (
     'include', 'deps/lzma-26.02/include', 'deps/miniz-3.1.2', 'deps/zstd-1.5.7')))
 # the versions: executable on the disc, recompiler configuration, title,
 # disc image names
@@ -168,6 +173,7 @@ def main():
     for d in SOURCE_DIRS:
         for ext in ('c', 'cpp'):
             sources += glob.glob(os.path.join(HERE, d, '**', '*.' + ext), recursive=True)
+    sources = [p for p in sources if not rel(p).startswith(EDITOR_DIR + '/')]
     sources.sort()
     sources += [os.path.join(HERE, p) for p in EXTRA_SOURCES]
     # the recompiled code: big files of plain register/memory operations
@@ -228,7 +234,19 @@ def main():
         lines.append(f'build {obj}: rc {r} | {" ".join(RESOURCE_FILES)}')
         objs.append(obj)
     lines.append(f'build {OUT}: link {" ".join(objs)}')
-    lines.append(f'default {OUT}')
+    # the level editor: its own sources, the shared ones (objects of the game's build), ImGui, libchdr
+    editor_objs = []
+    for src in sorted(glob.glob(os.path.join(HERE, EDITOR_DIR, '*.cpp'))):
+        r = rel(src)
+        obj = 'build/obj/' + os.path.splitext(r)[0] + '.o'
+        lines.append(f'build {obj}: cxx {r}')
+        editor_objs.append(obj)
+    for r in EDITOR_SHARED + EXTRA_SOURCES + CHDR_SOURCES:
+        editor_objs.append('build/obj/' + os.path.splitext(r)[0] + '.o')
+    lines.append(f'build build/obj/{EDITOR_DIR}/editor.res.o: rc {EDITOR_DIR}/editor.rc | assets/icon/roll_away.ico src/resources.h')
+    editor_objs.append(f'build/obj/{EDITOR_DIR}/editor.res.o')
+    lines.append(f'build {EDITOR_OUT}: link {" ".join(editor_objs)}')
+    lines.append(f'default {OUT} {EDITOR_OUT}')
     open(os.path.join(HERE, 'build.ninja'), 'w', newline='\n').write('\n'.join(lines) + '\n')
     print(f'wrote build.ninja ({len(sources)} sources, {len(gen_sources)} recompiled files)')
 
