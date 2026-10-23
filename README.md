@@ -45,7 +45,7 @@ All releases are on the [Releases page](https://github.com/Bitsandbreakpoints/ro
    which of them.
 4. Click **PLAY**, or **LEVEL EDITOR** to make levels of your own.
 
-![The launcher](images/launcher.png)
+![The launcher](images/launcher-menu.png)
 
 ## Pictures
 
