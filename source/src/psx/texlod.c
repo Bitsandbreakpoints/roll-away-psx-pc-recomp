@@ -369,9 +369,13 @@ int texlod_upgrade(GpuPrim *p, int *u, int *v, int count, int gain[3])
     p->clut_y = s->clut_y[m->slot];
     p->depth = 1;
     memcpy(gain, m->gain, sizeof(m->gain));
+    /* the game's corners: a copy's 0, 15, 31 are the full texture's 0, 31,
+     * 63 (not 0, 30, 62: the texture would sit a texel off and jump when
+     * the game changes to the full one) */
     for (int k = 0; k < count; k++) {
-        u[k] = full_u + (u[k] - cell_u) * (FULL / SMALL);
-        v[k] = full_v + (v[k] - cell_v) * (FULL / SMALL);
+        int du = u[k] - cell_u, dv = v[k] - cell_v;
+        u[k] = full_u + (du > 0 ? du * (FULL / SMALL) + 1 : 0);
+        v[k] = full_v + (dv > 0 ? dv * (FULL / SMALL) + 1 : 0);
     }
     return 1;
 }
