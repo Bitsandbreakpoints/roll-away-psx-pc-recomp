@@ -413,6 +413,13 @@ static void game_tab(void)
     help("Arcade games (and saved games loaded) without the time limit: the time stands still, "
          "and the hourglasses and clocks are taken away from the levels. Time Trial keeps its time. "
          "Can be changed during the game (F1); the power-ups go from the next level on.");
+    section("KULA WORLD (EUROPE)");
+    row("60 Hz");
+    check("##pal60", &s->pal_60hz);
+    note("as fast as the other versions; off: 50 Hz, as on a PAL TV");
+    help("The European version was made for 50 Hz TVs: the game takes a step each frame, so it ran a "
+         "sixth slower than in America and Japan (and its levels gave more seconds). At 60 Hz it plays "
+         "as the other versions do. Can be changed during the game (F1).");
 }
 
 static void reset_all(void)

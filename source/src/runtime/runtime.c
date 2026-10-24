@@ -51,6 +51,7 @@ static jmp_buf s_stop;                  /* leaves the game (psx_run_game) */
 static jmp_buf s_exec;                  /* starts the loaded executable */
 static int s_running;
 static uint32_t s_entry;
+static int s_pal_60hz = 1;              /* (psx_set_pal_60hz) */
 static char s_fatal[512];
 
 /* ---- calls by address -------------------------------------------------- */
@@ -357,7 +358,7 @@ static int load_executable(const char *path, uint32_t stack, uint32_t stack_size
     GPR[28] = get32(file + EXE_GP);
     GPR[31] = 0;
     g_rt_module = module;
-    irq_set_pal(module->pal);
+    irq_set_pal(module->pal && !s_pal_60hz);
     s_entry = get32(file + EXE_PC);
     psx_log("loaded %s: %08X..%08X, entry %08X, sp %08X", name, text, text + text_size, s_entry,
             GPR[29]);
@@ -437,6 +438,17 @@ void psx_run_game(PsxFrameHook hook)
     s_running = 0;
     psx_devices_stop();
     psx_log("game stopped");
+}
+
+/* A PAL game (Kula World, Europe) at the NTSC pace: the game takes a step
+ * each vertical blank, the same step as the NTSC versions, so at 60 Hz it
+ * plays as they do (on a PAL TV it ran a sixth slower). */
+void psx_set_pal_60hz(int on)
+{
+    s_pal_60hz = on;
+    if (g_rt_module) {
+        irq_set_pal(g_rt_module->pal && !on);
+    }
 }
 
 int psx_video_hz(void)

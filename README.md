@@ -96,6 +96,7 @@ All of these can be changed under **SETTINGS** (and in the game from the
 pause menu).
 
 **Pictures**
+- **A steady 60 frames a second**, also at 4× with every enhancement on.
 - **Higher internal resolution**, up to 4×.
 - **Precise vertices**: no PS1 "wobble", perspective-correct textures.
 - **True colour**: smooth shading and transparency in 8 bits per colour,
@@ -143,6 +144,8 @@ respective owners.*
 **Comfort**
 - **Save after every level** (optional, under GAME): the game offers its
   save point after each level, not only every fifth.
+- **Kula World at 60 Hz** (on by default, under GAME): the European
+  version at the speed of the others instead of the PAL 50 Hz.
 - **Timeless Arcade** (optional, under GAME): Arcade games without the time
   limit. The time stands still, the hourglass leaves the screen, and the
   hourglasses and clocks are taken away from the levels. Time Trial keeps
@@ -292,9 +295,11 @@ SCPS-10064. Each release's code is recompiled on its own and the program
 holds all three; the launcher sees which disc you chose and runs its code.
 Other releases or modified discs are not supported.
 
-**Does Kula World run at 50 Hz?** Yes. The European release is a PAL game
-and runs at the PAL rate, as on a European PlayStation; the others run at
-60 Hz. *KulaQuest* is Japanese throughout, and confirms with Circle, as on
+**Does Kula World run at 60 Hz?** Yes, by default. The European release
+is a PAL game made for 50 Hz TVs: it takes the same step each frame as the
+others, so on a European PlayStation it ran a sixth slower. At 60 Hz it
+plays exactly as *Roll Away* and *KulaQuest* do. For the original PAL speed,
+turn off **Kula World (Europe): 60 Hz** under GAME. *KulaQuest* is Japanese throughout, and confirms with Circle, as on
 a Japanese console.
 
 **Can the versions share a memory card?** Yes. Like a real card,

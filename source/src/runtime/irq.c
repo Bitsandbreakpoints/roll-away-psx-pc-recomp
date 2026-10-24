@@ -481,7 +481,11 @@ void irq_vblank(void)
     game_unlock();
     psx_vblank();
     game_lock();
-    s_last_vblank_us = irq_time_us();
+    /* the next one a frame after this one was due, not after the PC has
+     * drawn and shown it (else that time comes on top of every frame:
+     * 56 frames a second instead of 60); from now if it fell behind */
+    uint64_t now = irq_time_us(), due = s_last_vblank_us + FRAME_US;
+    s_last_vblank_us = due <= now && now - due < (uint64_t) FRAME_US ? due : now;
     s_vblank_count++;
     gte_new_frame();
     {
@@ -502,8 +506,13 @@ void irq_vblank(void)
             window_longest = s_repeat_run > window_longest ? s_repeat_run : window_longest;
         }
         if (s_vblank_count % 300 == 0 && GetEnvironmentVariableA("RA_FRAME_LOG", NULL, 0)) {
-            psx_log("frames %d-%d: %d without a new picture (longest run %d)",
-                    s_vblank_count - 300, s_vblank_count, window_repeats, window_longest);
+            /* (and how fast the PC kept the pace: vertical blanks per second) */
+            static uint64_t window_start;
+            uint64_t now = irq_time_us();
+            psx_log("frames %d-%d: %d without a new picture (longest run %d), %.1f per second",
+                    s_vblank_count - 300, s_vblank_count, window_repeats, window_longest,
+                    window_start ? 300e6 / (double) (now - window_start) : 0.0);
+            window_start = now;
             window_repeats = window_longest = 0;
         }
     }

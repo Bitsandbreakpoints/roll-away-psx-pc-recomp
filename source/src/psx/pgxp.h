@@ -35,6 +35,15 @@ void pgxp_store(const void *address, uint32_t value, const PgxpVertex *v);
 /* TRUE and *v if `address` was last stored from the GTE with `value`. */
 int pgxp_lookup(const void *address, uint32_t value, PgxpVertex *v);
 
+/* A bit per word of main RAM (at PGXP_RAM_ADDRESS in the PC's memory) that
+ * a precise position was ever stored to: most loads of the game's code
+ * are from other words, and pgxp_lookup() on them (a miss in a 1.8 MB
+ * table) was a third of the time.  Bits are never cleared (a set bit only
+ * means: look). */
+#define PGXP_RAM_ADDRESS        0x80000000u
+#define PGXP_RAM_WORDS          (0x200000u / 4)
+extern uint32_t g_pgxp_stored[PGXP_RAM_WORDS / 32];
+
 #ifdef __cplusplus
 }
 #endif

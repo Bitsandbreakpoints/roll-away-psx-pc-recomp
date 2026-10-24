@@ -69,6 +69,9 @@ void psx_vblank(void);
 /* The running version's frame rate: 60 (NTSC) or 50 (PAL). */
 int psx_video_hz(void);
 
+/* A PAL game at 60 Hz (the NTSC pace) - the setting "Kula World at 60 Hz". */
+void psx_set_pal_60hz(int on);
+
 /* (runtime) the emulated devices: power-on state / the game has stopped */
 void psx_devices_reset(void);
 void psx_devices_stop(void);

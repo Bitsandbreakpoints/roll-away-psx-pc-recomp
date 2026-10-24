@@ -312,9 +312,13 @@ static void plot(const Prim *p, int x, int y, int r, int g, int b, int u, int v)
 
 /* ---- polygons --------------------------------------------------------- */
 
-static int64_t edge(const Vertex *a, const Vertex *b, int x, int y)
+/* (32 bits are enough: coordinates are 11-bit plus the drawing offset, and
+ * inside a drawn triangle the weights are at most its area, under 2^21,
+ * times an 8-bit value - 64-bit products and divisions per pixel were a
+ * tenth of the time) */
+static int32_t edge(const Vertex *a, const Vertex *b, int x, int y)
 {
-    return (int64_t) (b->x - a->x) * (y - a->y) - (int64_t) (b->y - a->y) * (x - a->x);
+    return (b->x - a->x) * (y - a->y) - (b->y - a->y) * (x - a->x);
 }
 
 /* the edge a->b belongs to the triangle (top or left edge) */
@@ -329,9 +333,9 @@ static int edge_too_long(const Vertex *a, const Vertex *b)
     return abs(b->x - a->x) > MAX_EDGE_DX || abs(b->y - a->y) > MAX_EDGE_DY;
 }
 
-static int interpolate(int64_t w0, int64_t w1, int64_t w2, int a0, int a1, int a2, int64_t area)
+static int interpolate(int32_t w0, int32_t w1, int32_t w2, int a0, int a1, int a2, int32_t area)
 {
-    return (int) ((w0 * a0 + w1 * a1 + w2 * a2) / area);
+    return (w0 * a0 + w1 * a1 + w2 * a2) / area;
 }
 
 /* polygons with no area or too long an edge are not drawn */
@@ -343,7 +347,7 @@ static int triangle_drawn(const Vertex *v0, const Vertex *v1, const Vertex *v2)
 
 static void draw_triangle(const Prim *p, const Vertex *v0, const Vertex *v1, const Vertex *v2)
 {
-    int64_t area = edge(v0, v1, v2->x, v2->y);
+    int32_t area = edge(v0, v1, v2->x, v2->y);
 
     if (!triangle_drawn(v0, v1, v2)) {
         return;
@@ -370,7 +374,7 @@ static void draw_triangle(const Prim *p, const Vertex *v0, const Vertex *v1, con
     int tl0 = top_left(v1, v2), tl1 = top_left(v2, v0), tl2 = top_left(v0, v1);
     for (int y = min_y; y <= max_y; y++) {
         for (int x = min_x; x <= max_x; x++) {
-            int64_t w0 = edge(v1, v2, x, y), w1 = edge(v2, v0, x, y), w2 = edge(v0, v1, x, y);
+            int32_t w0 = edge(v1, v2, x, y), w1 = edge(v2, v0, x, y), w2 = edge(v0, v1, x, y);
             if (w0 < 0 || w1 < 0 || w2 < 0 || (w0 == 0 && !tl0) || (w1 == 0 && !tl1)
                 || (w2 == 0 && !tl2)) {
                 continue;

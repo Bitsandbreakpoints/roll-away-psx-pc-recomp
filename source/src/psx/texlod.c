@@ -18,7 +18,11 @@
  * palettes next to those it drew the page with (a custom level may show a
  * block's texture only far away: the full-size one was never drawn near
  * the camera, and the copy stayed blurred).
- * Results are kept per cell until new textures are loaded.  Only the
+ * Results are kept per cell until new textures are loaded.  Comparing is
+ * not cheap (every candidate, 32 x 32 texels): at most MATCHES_PER_FRAME
+ * comparisons a frame - a copy waits a frame or two (drawn as it is, or
+ * with its last match while that still stands) rather than the frame
+ * taking 50 ms (the title's fly-over turned new blocks to the camera).  Only the
  * high-resolution picture changes; the game's own VRAM and drawing stay
  * as they are.
  */
@@ -28,6 +32,7 @@
 #include "psx/texlod.h"
 #include "psx/gpu.h"
 #include "psx/log.h"
+#include "psx/pgxp.h"
 
 int g_texlod_log;                       /* (the log: the first matches) */
 
@@ -40,6 +45,7 @@ int g_texlod_log;                       /* (the log: the first matches) */
 #define SEED_ROWS               2       /* the palettes this many rows around a seen one */
 #define MAX_MATCHES             512
 #define MIN_COMPARED            (SMALL * SMALL / 2)
+#define MATCHES_PER_FRAME       2
 
 typedef struct {
     int page_x, page_y;
@@ -49,6 +55,7 @@ typedef struct {
     int seeded[SLOTS_PER_PAGE];         /* not drawn by the game (yet), only a candidate */
     int have_small[SLOTS_PER_PAGE];     /* `small` is made */
     uint8_t small[SLOTS_PER_PAGE][SMALL * SMALL][4];   /* RGB + opaque, scaled down */
+    uint8_t luma[SLOTS_PER_PAGE][SMALL * SMALL];       /* its brightness */
 } Source;
 
 typedef struct {
@@ -57,6 +64,7 @@ typedef struct {
     int sources;                        /* how many source cells it was compared with */
     int found;                          /* a full-size texture was found: */
     int source, slot;
+    int cell, slot_clut_x, slot_clut_y; /* (what that slot held: slots are taken over) */
     int gain[3];                        /* its colours to the copy's (x 256): distance shading */
 } Match;
 
@@ -237,6 +245,11 @@ void texlod_note(const GpuPrim *p, const int *u, const int *v, int count)
     }
 }
 
+static int luma(const int *c)
+{
+    return (c[0] * 77 + c[1] * 150 + c[2] * 29) >> 8;
+}
+
 /* a source cell in one of its palettes, scaled down to half */
 static void make_small(Source *s, int slot)
 {
@@ -262,6 +275,8 @@ static void make_small(Source *s, int slot)
                 out[c] = (uint8_t) (n ? sum[c] / n : 0);
             }
             out[3] = n > 0;
+            int c[3] = { out[0], out[1], out[2] };
+            s->luma[slot][v * SMALL + u] = (uint8_t) luma(c);
         }
     }
     s->have_small[slot] = 1;
@@ -273,11 +288,6 @@ static void make_small(Source *s, int slot)
  * their brightness (blind to brightness and contrast), and the colours'
  * ratio is kept to shade the full-size texture alike. */
 #define MATCH_MIN_PERMILLE      800     /* correlation x 1000 */
-
-static int luma(const int *c)
-{
-    return (c[0] * 77 + c[1] * 150 + c[2] * 29) >> 8;
-}
 
 static void find_match(Match *m)
 {
@@ -291,6 +301,10 @@ static void find_match(Match *m)
             c[3] = t != 0;
         }
     }
+    int copy_luma[SMALL * SMALL];
+    for (int k = 0; k < SMALL * SMALL; k++) {
+        copy_luma[k] = luma(copy[k]);
+    }
     int best = -1, best_slot = 0;
     double best_corr = -1, best_error = 0;
     long best_sum_a[3] = { 1, 1, 1 }, best_sum_b[3] = { 1, 1, 1 };
@@ -300,25 +314,17 @@ static void find_match(Match *m)
             if (!s->have_small[slot]) {
                 make_small(s, slot);
             }
-            long sum_a[3] = { 0, 0, 0 }, sum_b[3] = { 0, 0, 0 };
-            double aa[3] = { 0, 0, 0 }, bb[3] = { 0, 0, 0 }, ab[3] = { 0, 0, 0 };
-            double la = 0, lb = 0, laa = 0, lbb = 0, lab = 0;
+            /* the patterns: the correlation of their brightness (integers:
+             * at most 1024 x 255 x 255) */
+            const uint8_t (*small)[4] = s->small[slot];
+            const uint8_t *lum = s->luma[slot];
+            int32_t la = 0, lb = 0, laa = 0, lbb = 0, lab = 0;
             int compared = 0;
             for (int k = 0; k < SMALL * SMALL; k++) {
-                const uint8_t *a8 = s->small[slot][k];
-                const int *b = copy[k];
-                if (!a8[3] || !b[3]) {
+                if (!small[k][3] || !copy[k][3]) {
                     continue;
                 }
-                int a[3] = { a8[0], a8[1], a8[2] };
-                for (int c = 0; c < 3; c++) {
-                    sum_a[c] += a[c];
-                    sum_b[c] += b[c];
-                    aa[c] += (double) a[c] * a[c];
-                    bb[c] += (double) b[c] * b[c];
-                    ab[c] += (double) a[c] * b[c];
-                }
-                double x = luma(a), y = luma(b);
+                int x = lum[k], y = copy_luma[k];
                 la += x;
                 lb += y;
                 laa += x * x;
@@ -330,21 +336,41 @@ static void find_match(Match *m)
                 continue;
             }
             double n = compared;
-            double va = laa - la * la / n, vb = lbb - lb * lb / n, cov = lab - la * lb / n;
+            double va = laa - (double) la * la / n, vb = lbb - (double) lb * lb / n;
+            double cov = lab - (double) la * lb / n;
             if (va < n || vb < n) {
                 continue;                   /* (flat: nothing to compare) */
             }
             double corr = cov / sqrt(va * vb);
+            /* another palette of the best cell (the same pattern): the closer
+             * colours decide; else a better pattern */
+            int same = best == i && s->cell[slot] == s->cell[best_slot];
+            if (!same && corr <= best_corr) {
+                continue;
+            }
             /* the colours: what is left of the copy's after the palette's
              * are scaled by the mean ratio (per texel and channel) */
+            long sum_a[3] = { 0, 0, 0 }, sum_b[3] = { 0, 0, 0 };
+            double aa[3] = { 0, 0, 0 }, bb[3] = { 0, 0, 0 }, ab[3] = { 0, 0, 0 };
+            for (int k = 0; k < SMALL * SMALL; k++) {
+                if (!small[k][3] || !copy[k][3]) {
+                    continue;
+                }
+                for (int c = 0; c < 3; c++) {
+                    int av = small[k][c], bv = copy[k][c];
+                    sum_a[c] += av;
+                    sum_b[c] += bv;
+                    aa[c] += (double) av * av;
+                    bb[c] += (double) bv * bv;
+                    ab[c] += (double) av * bv;
+                }
+            }
             double error = 0;
             for (int c = 0; c < 3; c++) {
                 double g = sum_a[c] ? (double) sum_b[c] / sum_a[c] : 1;
                 error += bb[c] - 2 * g * ab[c] + g * g * aa[c];
             }
             error /= n * 3;
-            /* another palette of the best cell (the same pattern): the closer colours */
-            int same = best == i && s->cell[slot] == s->cell[best_slot];
             if (same ? error < best_error : corr > best_corr) {
                 best = i;
                 best_slot = slot;
@@ -359,6 +385,11 @@ static void find_match(Match *m)
     m->found = best >= 0 && best_corr * 1000 >= MATCH_MIN_PERMILLE;
     m->source = best;
     m->slot = best_slot;
+    if (best >= 0) {
+        m->cell = s_sources[best]->cell[best_slot];
+        m->slot_clut_x = s_sources[best]->clut_x[best_slot];
+        m->slot_clut_y = s_sources[best]->clut_y[best_slot];
+    }
     for (int c = 0; c < 3; c++) {
         long g = best_sum_a[c] ? best_sum_b[c] * 256 / best_sum_a[c] : 256;
         m->gain[c] = (int) (g < 64 ? 64 : g > 512 ? 512 : g);
@@ -417,13 +448,24 @@ int texlod_upgrade(GpuPrim *p, int *u, int *v, int count, int gain[3])
         m->cell_v = cell_v;
         m->sources = -1;
     }
-    if (m->sources != s_cell_count) {
+    static uint32_t budget_frame;
+    static int budget;
+    if (budget_frame != g_pgxp_frame) {
+        budget_frame = g_pgxp_frame;
+        budget = MATCHES_PER_FRAME;
+    }
+    if (m->sources != s_cell_count && budget > 0) {
+        budget--;
         find_match(m);                  /* (new candidates since the last try) */
     }
-    if (!m->found) {
+    if (!m->found || m->source >= s_source_count) {
         return 0;
     }
     const Source *s = s_sources[m->source];
+    if (m->slot >= s->slots || s->cell[m->slot] != m->cell || s->clut_x[m->slot] != m->slot_clut_x
+        || s->clut_y[m->slot] != m->slot_clut_y) {
+        return 0;                       /* (its slot was taken over: compared again soon) */
+    }
     int cell = s->cell[m->slot];
     int full_u = (cell % (PAGE_TEXELS / FULL)) * FULL, full_v = (cell / (PAGE_TEXELS / FULL)) * FULL;
     p->page_x = s->page_x;

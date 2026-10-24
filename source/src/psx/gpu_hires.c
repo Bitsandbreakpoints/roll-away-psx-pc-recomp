@@ -15,6 +15,14 @@
 #include "psx/log.h"
 #include "platform/threads.h"
 
+/* (int) floorf(f) without the library call (it was a tenth of the time,
+ * called for each texel); the same for |f| < 2^31 */
+static inline int floor_int(float f)
+{
+    int i = (int) f;
+    return i - (f < (float) i);
+}
+
 #define SUBPIXEL_BITS           4
 #define SUBPIXEL                (1 << SUBPIXEL_BITS)
 #define QUEUE_SIZE              16384
@@ -567,8 +575,8 @@ static void draw_triangle(const Command *c, int band_y1, int band_y2)
                     goto next;
                 }
                 if (textured) {
-                    u = (int) floorf(val[ATTR_U] * w);
-                    v = (int) floorf(val[ATTR_V] * w);
+                    u = floor_int(val[ATTR_U] * w);
+                    v = floor_int(val[ATTR_V] * w);
                     u = u < c->u.tri.u_min ? c->u.tri.u_min : u > c->u.tri.u_max ? c->u.tri.u_max : u;
                     v = v < c->u.tri.v_min ? c->u.tri.v_min : v > c->u.tri.v_max ? c->u.tri.v_max : v;
                 }

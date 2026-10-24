@@ -336,6 +336,7 @@ static void draw_picture(int w, int h)
 extern "C" int g_pgxp_debug;           /* (psx/gpu.c: RA_PGXP_DEBUG) */
 extern "C" int g_save_every_level;     /* (runtime/hooks.c) */
 extern "C" int g_timeless_arcade;      /* (runtime/timeless.c) */
+extern "C" void psx_set_pal_60hz(int on);   /* (runtime/runtime.c) */
 extern "C" int g_prim_trace[6];
 extern "C" int g_gte_trace[6];         /* (psx/gte.c: RA_GTE_TRACE) */        /* (psx/gpu.c: RA_PRIM_TRACE) */
 
@@ -372,6 +373,7 @@ static void apply_game_settings(void)
                           g_settings_pc.volume_effects);
     g_save_every_level = g_settings_pc.save_every_level;
     g_timeless_arcade = g_settings_pc.timeless_arcade;
+    psx_set_pal_60hz(g_settings_pc.pal_60hz);
 }
 
 /* F1 or Select+Start on controller 1 was pressed (not held) */

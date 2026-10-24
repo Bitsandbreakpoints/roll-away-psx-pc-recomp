@@ -181,7 +181,18 @@ void rt_pgxp_move(int rd, int rs);
 void rt_pgxp_lw(int rt, uint32_t address);
 extern int g_pgxp_track;          /* (pgxp.h) */
 #define RT_PGXP_SW(rt, a)     do { if (g_pgxp_reg_valid & (1u << (rt))) rt_pgxp_sw((rt), (a)); } while (0)
-#define RT_PGXP_LW(rt, a) do { if (g_pgxp_track) rt_pgxp_lw((rt), (a)); } while (0)
+extern uint32_t g_pgxp_stored[];   /* (pgxp.h: words a precise position was stored to) */
+/* (a load from main RAM where none was ever stored is decided here, without the lookup) */
+#define RT_PGXP_LW(rt, a) do { \
+        if (g_pgxp_track) { \
+            uint32_t o_ = RAM_OFFSET(a); \
+            if (o_ >= RT_RAM_SIZE || (g_pgxp_stored[o_ >> 7] >> ((o_ >> 2) & 31) & 1u)) { \
+                rt_pgxp_lw((rt), (a)); \
+            } else { \
+                g_pgxp_reg_valid &= ~(1u << (rt)); \
+            } \
+        } \
+    } while (0)
 #define RT_PGXP_MOVE(rd, rs)     do { if (g_pgxp_reg_valid & (1u << (rs))) rt_pgxp_move((rd), (rs)); } while (0)
 
 /* ---- the rest (runtime.c) ---------------------------------------------- */

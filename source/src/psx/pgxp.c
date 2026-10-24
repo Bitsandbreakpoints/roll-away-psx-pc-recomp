@@ -20,6 +20,7 @@ int g_pgxp_age_stats[8];                /* (debugging: lookups by age in frames)
 int g_pgxp_enabled;
 int g_pgxp_track;
 static PgxpSlot s_slots[PGXP_SLOTS];
+uint32_t g_pgxp_stored[PGXP_RAM_WORDS / 32];
 
 static PgxpSlot *slot(const void *address)
 {
@@ -29,6 +30,10 @@ static PgxpSlot *slot(const void *address)
 void pgxp_store(const void *address, uint32_t value, const PgxpVertex *v)
 {
     PgxpSlot *s = slot(address);
+    uintptr_t word = ((uintptr_t) address - PGXP_RAM_ADDRESS) >> 2;
+    if (word < PGXP_RAM_WORDS) {
+        g_pgxp_stored[word >> 5] |= 1u << (word & 31);
+    }
     s->address = (uintptr_t) address;
     s->value = value;
     s->frame = g_pgxp_frame;

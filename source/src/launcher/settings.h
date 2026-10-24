@@ -66,6 +66,7 @@ typedef struct {
 
     int save_every_level;               /* the save screen after every level (else every fifth) */
     int timeless_arcade;                /* Arcade without the time limit or the time power-ups */
+    int pal_60hz;                       /* Kula World (Europe, PAL) at 60 Hz, as the others */
 
     ControllerConfig players[SETTINGS_PLAYERS];
 } Settings;
