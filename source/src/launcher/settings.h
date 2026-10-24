@@ -65,6 +65,7 @@ typedef struct {
     int volume_effects;                 /* everything the SPU plays */
 
     int save_every_level;               /* the save screen after every level (else every fifth) */
+    int timeless_arcade;                /* Arcade without the time limit or the time power-ups */
 
     ControllerConfig players[SETTINGS_PLAYERS];
 } Settings;

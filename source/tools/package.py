@@ -83,8 +83,9 @@ Quit game, and holding Tab fast-forwards.
 Controls (keyboard and XInput controllers, two players), graphics
 (internal resolution up to 4x, precise vertices, true colour, detailed distant textures, an optional 16:9
 widescreen mode, picture filters such as
-CRT, Soft CRT, Composite CRT and PVM, full screen) and sound (separate music and effects volumes) are set
-under SETTINGS. The settings are kept in settings.ini next to the program.
+CRT, Soft CRT, Composite CRT and PVM, full screen), sound (separate music and effects volumes) and the
+game (a save point after every level; Timeless Arcade: no time limit, no
+hourglasses or clocks) are set under SETTINGS. The settings are kept in settings.ini next to the program.
 The game saves to a memory card, kept in roll_away_card1.mcd next to the
 program (the format emulators use). No BIOS is needed.
 

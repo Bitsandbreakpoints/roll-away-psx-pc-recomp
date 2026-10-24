@@ -69,6 +69,7 @@ void settings_defaults(Settings *s)
     s->volume_music = 100;
     s->volume_effects = 100;
     s->save_every_level = 0;
+    s->timeless_arcade = 0;
     for (int p = 0; p < SETTINGS_PLAYERS; p++) {
         s->players[p].device = p == 0 ? DEVICE_AUTO : DEVICE_NONE;
         settings_default_keys(&s->players[p], p);
@@ -124,6 +125,7 @@ static void set_value(Settings *s, const char *section, const char *key, const c
         else if (strcmp(key, "effects") == 0) s->volume_effects = clampi(n, 0, 100);
     } else if (strcmp(section, "game") == 0) {
         if (strcmp(key, "save_every_level") == 0) s->save_every_level = n != 0;
+        if (strcmp(key, "timeless_arcade") == 0) s->timeless_arcade = n != 0;
     } else if (strncmp(section, "player", 6) == 0) {
         int p = atoi(section + 6) - 1;
         if (p < 0 || p >= SETTINGS_PLAYERS) {
@@ -227,8 +229,9 @@ int settings_save(void)
             s->detailed_textures);
     fprintf(f, "[sound]\nmaster = %d\nmusic = %d\neffects = %d\n\n", s->volume_master,
             s->volume_music, s->volume_effects);
-    fprintf(f, "[game]\n; 1 = the save screen after every level, 0 = every fifth (as on the console)\nsave_every_level = %d\n\n",
-            s->save_every_level);
+    fprintf(f, "[game]\n; 1 = the save screen after every level, 0 = every fifth (as on the console)\nsave_every_level = %d\n"
+            "; 1 = Arcade without the time limit, hourglasses and clocks\ntimeless_arcade = %d\n\n",
+            s->save_every_level, s->timeless_arcade);
     for (int p = 0; p < SETTINGS_PLAYERS; p++) {
         const ControllerConfig *c = &s->players[p];
         fprintf(f, "[player%d]\n; -1 none, 0 keyboard, 1-4 XInput controller, 5 automatic\n", p + 1);

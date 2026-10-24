@@ -143,6 +143,10 @@ respective owners.*
 **Comfort**
 - **Save after every level** (optional, under GAME): the game offers its
   save point after each level, not only every fifth.
+- **Timeless Arcade** (optional, under GAME): Arcade games without the time
+  limit. The time stands still, the hourglass leaves the screen, and the
+  hourglasses and clocks are taken away from the levels. Time Trial keeps
+  its time. Works with all three versions of the game.
 - **Pause menu** with Select + Start (or F1): resume, back to the launcher,
   quit the game, and every setting.
 - **Fast forward**: hold Tab.
@@ -178,8 +182,7 @@ look as they do in the game.
 ### What it does
 
 - **Blocks snap together**: click the side of a block and the new block
-  sits right there. Drag to build a row, a floor or a wall in one go. For
-  blocks in the air, the build plane (G) gives you a floor to start from.
+  sits right there, one block per click. For blocks in the air, the build plane (G) gives you a floor to start from.
 - **Everything the game has**: normal, fire, ice, invisible and acid
   blocks, moving, crumbling and flashing blocks and lasers; and on the
   blocks the start, keys, the exit and the hidden exit, coins, gems, fruit,

@@ -66,6 +66,9 @@ def main():
         time.sleep(3)
         hwnd = find_window(proc.pid)
         for step in script.split(';'):
+            if user32.IsIconic(hwnd):
+                user32.ShowWindow(hwnd, 9)  # (started minimised from some shells: SW_RESTORE)
+                time.sleep(1)
             a = step.split()
             if not a:
                 continue

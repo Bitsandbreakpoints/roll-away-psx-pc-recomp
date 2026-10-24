@@ -406,6 +406,13 @@ static void game_tab(void)
     note("the save screen after each level, not only every fifth");
     help("The game saves to the memory card file next to the program. Can be changed during the "
          "game (F1).");
+    section("ARCADE");
+    row("Timeless");
+    check("##timeless", &s->timeless_arcade);
+    note("no time limit, no hourglasses or clocks");
+    help("Arcade games (and saved games loaded) without the time limit: the time stands still, "
+         "and the hourglasses and clocks are taken away from the levels. Time Trial keeps its time. "
+         "Can be changed during the game (F1); the power-ups go from the next level on.");
 }
 
 static void reset_all(void)
@@ -735,8 +742,9 @@ static int menu_page(float w, float h)
     }
 
     disc_status(margin, h - margin - SMALL_SIZE * scale * 1.6f);
-    static const char *const HINTS[] = { "Enter / A", "Select", "Esc / B", "Quit" };
-    hints(ImGui::GetWindowDrawList(), w - margin * 0.6f, h - margin * 0.75f, HINTS, 2);
+    static const char *const HINTS[] = { "F1 / Select + Start", "In-game settings", "Enter / A", "Select",
+                                         "Esc / B", "Quit" };
+    hints(ImGui::GetWindowDrawList(), w - margin * 0.6f, h - margin * 0.75f, HINTS, 3);
     if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsKeyPressed(ImGuiKey_GamepadFaceRight, false)) {
         action = LAUNCHER_QUIT;
     }

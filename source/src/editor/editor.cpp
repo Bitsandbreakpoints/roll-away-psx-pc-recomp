@@ -31,7 +31,7 @@ static std::string s_disc_error;
 
 static const char *const TOOL_NAMES[TOOL_COUNT] = { "Build", "Erase", "Paint", "Things", "Select" };
 static const char *const TOOL_HINTS[TOOL_COUNT] = {
-    "Click a side of a block: a new block snaps on there. Drag for a row or a floor.",
+    "Click a side of a block: a new block snaps on there (one click, one block).",
     "Click blocks to take them away.",
     "Click blocks to make them the chosen kind.",
     "Click an open side of a block to put the chosen thing on it.",
@@ -1057,8 +1057,7 @@ static void help_window()
         ImGui::BulletText("Wheel: closer / farther;  W A S D, Q E: move;  F: look at the selection");
         ImGui::TextColored(ACCENT, "Building");
         ImGui::BulletText("1 Build, 2 Erase, 3 Paint, 4 Things, 5 Select");
-        ImGui::BulletText("Build: click a side of a block, the new block snaps to it;");
-        ImGui::Text("      drag to build a row, a floor or a wall");
+        ImGui::BulletText("Build: click a side of a block, the new block snaps to it");
         ImGui::BulletText("G: the build plane (blocks in the air), PgUp / PgDn its height");
         ImGui::BulletText("R: turn the selected thing;  Delete: take the selection away");
         ImGui::BulletText("Ctrl+Z / Ctrl+Y: undo / redo;  Ctrl+S: save;  F5: play");

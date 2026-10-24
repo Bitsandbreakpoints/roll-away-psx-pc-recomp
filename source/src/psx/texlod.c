@@ -14,6 +14,10 @@
  * if close enough, is taken, in the palette whose colours are closest to
  * the copy's (else the block's colours jump when the game changes to the
  * full-size texture near the camera).
+ * A page's cells the game has not drawn yet are candidates too, in the
+ * palettes next to those it drew the page with (a custom level may show a
+ * block's texture only far away: the full-size one was never drawn near
+ * the camera, and the copy stayed blurred).
  * Results are kept per cell until new textures are loaded.  Only the
  * high-resolution picture changes; the game's own VRAM and drawing stay
  * as they are.
@@ -32,7 +36,8 @@ int g_texlod_log;                       /* (the log: the first matches) */
 #define PAGE_TEXELS             256
 #define MAX_SOURCES             32      /* 8-bit pages seen */
 #define CELLS_PER_PAGE          ((PAGE_TEXELS / FULL) * (PAGE_TEXELS / FULL))
-#define SLOTS_PER_PAGE          48      /* cells x the palettes each is drawn with */
+#define SLOTS_PER_PAGE          128     /* cells x the palettes each is drawn with */
+#define SEED_ROWS               2       /* the palettes this many rows around a seen one */
 #define MAX_MATCHES             512
 #define MIN_COMPARED            (SMALL * SMALL / 2)
 
@@ -41,6 +46,7 @@ typedef struct {
     int slots;                          /* a cell drawn with a palette: */
     int cell[SLOTS_PER_PAGE];
     int clut_x[SLOTS_PER_PAGE], clut_y[SLOTS_PER_PAGE];
+    int seeded[SLOTS_PER_PAGE];         /* not drawn by the game (yet), only a candidate */
     int have_small[SLOTS_PER_PAGE];     /* `small` is made */
     uint8_t small[SLOTS_PER_PAGE][SMALL * SMALL][4];   /* RGB + opaque, scaled down */
 } Source;
@@ -55,7 +61,7 @@ typedef struct {
 } Match;
 
 static int s_enabled = 1;
-static Source *s_sources;
+static Source *s_sources[MAX_SOURCES];           /* (allocated when first used) */
 static int s_source_count;
 static int s_cell_count;                /* source cells seen */
 static Match s_matches[MAX_MATCHES];
@@ -86,10 +92,23 @@ static int overlaps(int x, int y, int w, int h, int ax, int ay, int aw, int ah)
 void texlod_vram_changed(int x, int y, int w, int h)
 {
     for (int i = 0; i < s_source_count; i++) {
-        const Source *s = &s_sources[i];
+        Source *s = s_sources[i];
         int hit = overlaps(x, y, w, h, s->page_x, s->page_y, PAGE_TEXELS / 2, PAGE_TEXELS);
         for (int k = 0; k < s->slots && !hit; k++) {
-            hit = overlaps(x, y, w, h, s->clut_x[k], s->clut_y[k], 256, 1);
+            if (!overlaps(x, y, w, h, s->clut_x[k], s->clut_y[k], 256, 1)) {
+                continue;
+            }
+            if (!s->seeded[k]) {
+                hit = 1;
+                break;
+            }
+            /* (a guessed palette row changed: made again when needed) */
+            s->have_small[k] = 0;
+            for (int j = 0; j < MAX_MATCHES; j++) {
+                if (s_matches[j].used && s_matches[j].source == i && s_matches[j].slot == k) {
+                    s_matches[j].used = 0;
+                }
+            }
         }
         if (hit) {
             texlod_forget();
@@ -125,6 +144,43 @@ static void to_rgb(uint16_t c, int rgb[3])
     rgb[2] = ((c >> 10) & 31) << 3;
 }
 
+static int find_slot(const Source *s, int cell, int clut_x, int clut_y)
+{
+    for (int k = 0; k < s->slots; k++) {
+        if (s->cell[k] == cell && s->clut_x[k] == clut_x && s->clut_y[k] == clut_y) {
+            return k;
+        }
+    }
+    return -1;
+}
+
+/* A cell in a palette as a candidate; one the game drew takes the place
+ * of a guessed one when the page is full. */
+static int add_slot(Source *s, int cell, int clut_x, int clut_y, int seeded)
+{
+    int k = s->slots;
+    if (k == SLOTS_PER_PAGE) {
+        if (seeded) {
+            return 0;
+        }
+        for (k = SLOTS_PER_PAGE - 1; k >= 0 && !s->seeded[k]; k--) {
+        }
+        if (k < 0) {
+            return 0;
+        }
+        /* (the matches are made again: s_cell_count changes) */
+    } else {
+        s->slots++;
+    }
+    s->cell[k] = cell;
+    s->clut_x[k] = clut_x;
+    s->clut_y[k] = clut_y;
+    s->seeded[k] = seeded;
+    s->have_small[k] = 0;
+    s_cell_count++;
+    return 1;
+}
+
 void texlod_note(const GpuPrim *p, const int *u, const int *v, int count)
 {
     if (!s_enabled || p->depth != 1) {
@@ -139,38 +195,45 @@ void texlod_note(const GpuPrim *p, const int *u, const int *v, int count)
     int cell = cv * (PAGE_TEXELS / FULL) + cu;
     Source *s = NULL;
     for (int i = 0; i < s_source_count; i++) {
-        if (s_sources[i].page_x == p->page_x && s_sources[i].page_y == p->page_y) {
-            s = &s_sources[i];
+        if (s_sources[i]->page_x == p->page_x && s_sources[i]->page_y == p->page_y) {
+            s = s_sources[i];
             break;
         }
     }
     if (!s) {
-        if (!s_sources) {
-            s_sources = (Source *) malloc(sizeof(Source) * MAX_SOURCES);
-            if (!s_sources) {
-                return;
-            }
-        }
         if (s_source_count == MAX_SOURCES) {
             return;
         }
-        s = &s_sources[s_source_count++];
+        if (!s_sources[s_source_count]) {
+            s_sources[s_source_count] = (Source *) malloc(sizeof(Source));
+            if (!s_sources[s_source_count]) {
+                return;
+            }
+        }
+        s = s_sources[s_source_count++];
         s->slots = 0;
         s->page_x = p->page_x;
         s->page_y = p->page_y;
     }
-    for (int k = 0; k < s->slots; k++) {
-        if (s->cell[k] == cell && s->clut_x[k] == p->clut_x && s->clut_y[k] == p->clut_y) {
-            return;
-        }
+    int k = find_slot(s, cell, p->clut_x, p->clut_y);
+    if (k >= 0) {
+        s->seeded[k] = 0;
+        return;
     }
-    if (s->slots < SLOTS_PER_PAGE) {
-        int k = s->slots++;
-        s->cell[k] = cell;
-        s->clut_x[k] = p->clut_x;
-        s->clut_y[k] = p->clut_y;
-        s->have_small[k] = 0;
-        s_cell_count++;
+    if (!add_slot(s, cell, p->clut_x, p->clut_y, 0)) {
+        return;
+    }
+    /* the page's other cells, in this palette and the rows around it */
+    for (int dy = 0; dy <= 2 * SEED_ROWS; dy++) {
+        int row = p->clut_y + (dy & 1 ? -(dy + 1) / 2 : dy / 2);
+        if (row < 0 || row >= GPU_VRAM_HEIGHT) {
+            continue;
+        }
+        for (int c = 0; c < CELLS_PER_PAGE; c++) {
+            if (find_slot(s, c, p->clut_x, row) < 0) {
+                add_slot(s, c, p->clut_x, row, 1);
+            }
+        }
     }
 }
 
@@ -232,7 +295,7 @@ static void find_match(Match *m)
     double best_corr = -1, best_error = 0;
     long best_sum_a[3] = { 1, 1, 1 }, best_sum_b[3] = { 1, 1, 1 };
     for (int i = 0; i < s_source_count; i++) {
-        Source *s = &s_sources[i];
+        Source *s = s_sources[i];
         for (int slot = 0; slot < s->slots; slot++) {
             if (!s->have_small[slot]) {
                 make_small(s, slot);
@@ -302,7 +365,7 @@ static void find_match(Match *m)
     }
     if (g_texlod_log < 20 && m->found) {
         g_texlod_log++;
-        const Source *s = &s_sources[best];
+        const Source *s = s_sources[best];
         psx_log("texlod: page %d,%d clut %d,%d cell %d,%d: %s %.3f (%d cells) -> page %d,%d cell %d "
                 "clut %d,%d gain %d,%d,%d", m->page_x, m->page_y, m->clut_x, m->clut_y, m->cell_u,
                 m->cell_v, m->found ? "found" : "none", best_corr, s_cell_count, s->page_x, s->page_y,
@@ -360,7 +423,7 @@ int texlod_upgrade(GpuPrim *p, int *u, int *v, int count, int gain[3])
     if (!m->found) {
         return 0;
     }
-    const Source *s = &s_sources[m->source];
+    const Source *s = s_sources[m->source];
     int cell = s->cell[m->slot];
     int full_u = (cell % (PAGE_TEXELS / FULL)) * FULL, full_v = (cell / (PAGE_TEXELS / FULL)) * FULL;
     p->page_x = s->page_x;

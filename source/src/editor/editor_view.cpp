@@ -23,7 +23,6 @@ static const ImU32 SIGNAL_COLOURS[4] = {
 static int s_hover_cell = -1, s_hover_side = 0;     /* the block under the mouse */
 static int s_hover_new = -1;                        /* where the build tool would put one */
 static bool s_dragging, s_drag_changed;
-static int s_drag_axis = -1, s_drag_coord;          /* build: stay on this plane */
 static int s_last_action_cell = -1, s_last_action_side = -1;
 
 static Vec3 cell_lo(int c)
@@ -629,58 +628,14 @@ static void put_thing(int cell, int side)
     editor_changed();
 }
 
-/* a build drag: the cell of the first block's layer under the mouse, if
- * it touches a block (new blocks snap on, they do not float) */
-static int drag_cell()
-{
-    if (s_drag_axis < 0) {
-        return -1;
-    }
-    Vec3 o, d;
-    ImGuiIO &io = ImGui::GetIO();
-    renderer_ray(io.MousePos.x, io.MousePos.y, &o, &d);
-    float ov[3] = { o.x, o.y, o.z }, dv[3] = { d.x, d.y, d.z };
-    if (fabsf(dv[s_drag_axis]) < 1e-5f) {
-        return -1;
-    }
-    float t = (s_drag_coord + 0.5f - ov[s_drag_axis]) / dv[s_drag_axis];
-    if (t <= 0) {
-        return -1;
-    }
-    int p[3];
-    for (int a = 0; a < 3; a++) {
-        p[a] = a == s_drag_axis ? s_drag_coord : (int) floorf(ov[a] + dv[a] * t);
-    }
-    if (!Level::inside(p[0], p[1], p[2])) {
-        return -1;
-    }
-    int c = Level::cell(p[0], p[1], p[2]);
-    for (int s = 0; s < 6; s++) {
-        int n = Level::neighbour(c, s);
-        if (n >= 0 && g_ed.level.block(n)) {
-            return c;
-        }
-    }
-    return -1;
-}
-
-static void act(bool first)
+static void act()
 {
     Level &lv = g_ed.level;
     switch (g_ed.tool) {
     case TOOL_BUILD: {
-        int c = first ? s_hover_new : drag_cell();
+        int c = s_hover_new;
         if (c < 0 || lv.block(c)) {
             return;
-        }
-        if (first) {
-            /* a drag keeps to the layer of the first block (a floor, a wall) */
-            int x, y, z, n[3];
-            Level::position(c, &x, &y, &z);
-            int coords[3] = { x, y, z };
-            Level::side_normal(s_hover_cell >= 0 ? s_hover_side : SIDE_TOP, n);
-            s_drag_axis = n[0] ? 0 : n[1] ? 1 : 2;
-            s_drag_coord = coords[s_drag_axis];
         }
         change_once();
         int before = thing_total();
@@ -725,10 +680,8 @@ static void act(bool first)
         }
         break;
     case TOOL_SELECT:
-        if (first) {
-            g_ed.sel_cell = s_hover_cell;
-            g_ed.sel_side = s_hover_side;
-        }
+        g_ed.sel_cell = s_hover_cell;
+        g_ed.sel_side = s_hover_side;
         break;
     }
 }
@@ -876,17 +829,15 @@ void view_frame(int width, int height)
         } else {
             s_dragging = true;
             s_drag_changed = false;
-            s_drag_axis = -1;
-            act(true);
+            act();
             s_last_action_cell = s_hover_cell;
             s_last_action_side = s_hover_side;
         }
     } else if (s_dragging && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-        if (g_ed.tool == TOOL_BUILD) {
-            act(false);
-        } else if (s_hover_cell != s_last_action_cell || s_hover_side != s_last_action_side) {
-            if (g_ed.tool != TOOL_SELECT) {
-                act(false);
+        /* (blocks are built one click at a time, never by holding the button) */
+        if (s_hover_cell != s_last_action_cell || s_hover_side != s_last_action_side) {
+            if (g_ed.tool != TOOL_SELECT && g_ed.tool != TOOL_BUILD) {
+                act();
             }
             s_last_action_cell = s_hover_cell;
             s_last_action_side = s_hover_side;
@@ -905,9 +856,8 @@ void view_frame(int width, int height)
             renderer_box_lines(cell_lo(s_hover_cell) - v3(0.02f, 0.02f, 0.02f),
                                cell_lo(s_hover_cell) + v3(1.02f, 1.02f, 1.02f), 0xFFFFE050u);
         }
-    } else if (g_ed.tool == TOOL_BUILD && (s_dragging ? drag_cell() : s_hover_new) >= 0
-               && !lv.block(s_dragging ? drag_cell() : s_hover_new)) {
-        Vec3 lo = cell_lo(s_dragging ? drag_cell() : s_hover_new);
+    } else if (g_ed.tool == TOOL_BUILD && s_hover_new >= 0 && !lv.block(s_hover_new)) {
+        Vec3 lo = cell_lo(s_hover_new);
         uint32_t tint = (g_block_kinds[g_ed.block_kind].colour & 0x00FFFFFF) | 0x60000000u;
         renderer_cube(lo + v3(0.02f, 0.02f, 0.02f), lo + v3(0.98f, 0.98f, 0.98f), tint, true);
         renderer_box_lines(lo, lo + v3(1, 1, 1), 0xFF40A8FFu);
