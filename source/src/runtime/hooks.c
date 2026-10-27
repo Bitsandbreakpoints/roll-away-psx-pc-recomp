@@ -6,6 +6,7 @@
 #include "runtime/recomp.h"
 #include "runtime/runtime.h"
 #include "psx/log.h"
+#include "runtime/irq.h"
 
 int g_save_every_level;
 
@@ -98,5 +99,17 @@ void hook_custom_level_type(void)
         GPR[2] = 1;                     /* (not 0 keys: no bonus level) */
     } else if (type == 1) {
         GPR[2] = 0;
+    }
+}
+
+/*
+ * 0x51D18 (USA; EU 0x52AC8, JP 0x552C0), the loop that waits for the flag
+ * the game's VSync callback sets (t1, 0 until the vertical blank): the
+ * port sleeps until then instead of spinning through the rest of the frame.
+ */
+void hook_wait_vblank(void)
+{
+    if (GPR[9] == 0) {
+        irq_wait_vblank();
     }
 }

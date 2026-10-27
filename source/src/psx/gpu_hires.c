@@ -146,12 +146,14 @@ static uint32_t *pixel_at(int x, int y)
 
 /* ---- pixels (as gpu.c, reading textures from the original VRAM) ------- */
 
-static uint16_t original_at(int x, int y)
+/* (inlined: the texel fetches are the renderer's hottest code, four a
+ * pixel with texture filtering) */
+static inline __attribute__((always_inline)) uint16_t original_at(int x, int y)
 {
     return g_vram[y & (GPU_VRAM_HEIGHT - 1)][x & (GPU_VRAM_WIDTH - 1)];
 }
 
-static uint16_t texel(const Command *c, int u, int v)
+static inline __attribute__((always_inline)) uint16_t texel(const Command *c, int u, int v)
 {
     const GpuPrim *p = &c->p;
     u &= 0xFF;
@@ -198,7 +200,9 @@ static uint32_t pack_rgb(int r, int g, int b, int x, int y, int dither)
     if (s_true_color) {
         return (uint32_t) clamp255(r) | (uint32_t) clamp255(g) << 8 | (uint32_t) clamp255(b) << 16;
     }
-    return from_15bit(to_15bit(r, g, b, x, y, dither));
+    /* (x, y are pixels of the copy: dithering is in original pixels, as on
+     * the console - divided only here, two divisions a pixel were costly) */
+    return from_15bit(to_15bit(r, g, b, dither ? x / s_scale : 0, dither ? y / s_scale : 0, dither));
 }
 
 static uint16_t to_15bit(int r, int g, int b, int x, int y, int dither)
@@ -249,8 +253,6 @@ static void plot(const Command *c, int x, int y, int r, int g, int b, int u, int
     uint32_t color;
     uint32_t mask = c->e.set_mask ? PIXEL_MASK : 0;
     int semi = p->semi;
-    /* dithering in original pixels, as on the console */
-    int dx = x / s_scale, dy = y / s_scale;
 
     if (c->e.check_mask && (*dst & PIXEL_MASK)) {
         return;
@@ -266,13 +268,13 @@ static void plot(const Command *c, int x, int y, int r, int g, int b, int u, int
             color = from_15bit(t) & PIXEL_RGB;
         } else if (s_true_color) {
             color = pack_rgb((expand5(t & 31) * r) >> 7, (expand5((t >> 5) & 31) * g) >> 7,
-                             (expand5((t >> 10) & 31) * b) >> 7, dx, dy, 0);
+                             (expand5((t >> 10) & 31) * b) >> 7, x, y, 0);
         } else {
             color = pack_rgb(((t & 31) * r) >> 4, (((t >> 5) & 31) * g) >> 4,
-                             (((t >> 10) & 31) * b) >> 4, dx, dy, p->dither);
+                             (((t >> 10) & 31) * b) >> 4, x, y, p->dither);
         }
     } else {
-        color = pack_rgb(r, g, b, dx, dy, p->dither);
+        color = pack_rgb(r, g, b, x, y, p->dither);
     }
     if (semi) {
         color = blend(*dst, color, p->blend);
@@ -343,7 +345,11 @@ static void plot_filtered(const Command *c, int x, int y, int r, int g, int b, f
     /* texel channels as 0..248, like the 5-bit values times 8 (in true
      * colour 0..255) */
     int tr, tg, tb;
-    if (s_true_color) {
+    if (s_true_color && weight == FILTER_ONE * FILTER_ONE) {
+        tr = sr >> (2 * FILTER_BITS);   /* (all four texels drawn: no division) */
+        tg = sg >> (2 * FILTER_BITS);
+        tb = sb >> (2 * FILTER_BITS);
+    } else if (s_true_color) {
         tr = sr / weight;
         tg = sg / weight;
         tb = sb / weight;
@@ -360,7 +366,7 @@ static void plot_filtered(const Command *c, int x, int y, int r, int g, int b, f
     if (p->raw) {
         color = pack_rgb(tr, tg, tb, 0, 0, 0);
     } else {
-        color = pack_rgb((tr * r) >> 7, (tg * g) >> 7, (tb * b) >> 7, x / s_scale, y / s_scale,
+        color = pack_rgb((tr * r) >> 7, (tg * g) >> 7, (tb * b) >> 7, x, y,
                          p->dither);
     }
     if (p->semi && (nearest & 0x8000)) {

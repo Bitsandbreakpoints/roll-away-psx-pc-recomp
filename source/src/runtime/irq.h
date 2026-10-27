@@ -34,6 +34,9 @@ int irq_pal(void);
 /* The game waits for the hardware (e.g. the CD): lets the sound run for a
  * moment and checks for interrupts at the next chance. */
 void irq_idle(void);
+
+/* The game waits in a loop for the vertical blank: sleeps until it is due. */
+void irq_wait_vblank(void);
 int irq_vblank_count(void);
 
 /* A DMA transfer has finished (its callback runs soon). */

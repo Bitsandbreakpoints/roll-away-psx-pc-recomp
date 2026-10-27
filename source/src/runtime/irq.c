@@ -531,6 +531,50 @@ void irq_idle(void)
     g_rt_poll_count = 0;
 }
 
+/*
+ * The game waits in a loop for its vertical blank callback (the hook
+ * wait_vblank, the loop's flag still 0): sleeps until the vertical blank is
+ * due instead of spinning, which kept a core busy for the rest of every
+ * frame.  Not while something else could end the wait sooner (a pending
+ * callback, a timer interrupt); the last bit is left to the loop.
+ */
+#define WAIT_SPIN_US            1000
+
+void irq_wait_vblank(void)
+{
+    static HANDLE timer;
+    if (!can_interrupt() || s_vblank_pending || s_dma_pending || s_draw_pending) {
+        return;
+    }
+    for (int t = 0; t < TIMERS; t++) {
+        if (s_timers[t].interrupts && s_irq_callbacks[IRQ_TIMER0 + t] && s_timers[t].target) {
+            return;
+        }
+    }
+    uint64_t now = irq_time_us(), due = s_last_vblank_us + FRAME_US;
+    if (due <= now + WAIT_SPIN_US) {
+        return;
+    }
+    if (!timer) {
+        timer = CreateWaitableTimerExW(NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                                       TIMER_ALL_ACCESS);
+        if (!timer) {
+            timer = CreateWaitableTimerW(NULL, TRUE, NULL);
+        }
+        if (!timer) {
+            return;
+        }
+    }
+    LARGE_INTEGER wait;
+    wait.QuadPart = -(LONGLONG) (due - now - WAIT_SPIN_US) * 10;    /* (100 ns units, relative) */
+    game_unlock();
+    if (SetWaitableTimer(timer, &wait, 0, NULL, NULL, FALSE)) {
+        WaitForSingleObject(timer, INFINITE);
+    }
+    game_lock();
+    g_rt_poll_count = 0;
+}
+
 void rt_poll(void)
 {
     g_rt_poll_count = POLL_INTERVAL;
