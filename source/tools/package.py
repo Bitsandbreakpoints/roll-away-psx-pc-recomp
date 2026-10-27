@@ -69,8 +69,8 @@ SLUS-00724) as a disc image.
 How to play
 -----------
 1. Make an image of your own disc: "Roll Away (USA).bin" + ".cue" or a
-   .chd. (An .iso works too, but has no music or movies: an .iso holds no
-   XA audio or movie sectors.)
+   .chd. An .iso image is NOT supported: it holds no XA sectors (the
+   movies and the music), and the screen stays black.
 2. Start roll_away.exe and choose CHOOSE DISC (or drop the image on the
    window). The image is checked against the release the port was made
    from.

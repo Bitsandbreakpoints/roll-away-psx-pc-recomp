@@ -43,8 +43,8 @@ tills spelet är igång.
 Varken källkoden eller programmet innehåller grafik, ljud, musik, filmer,
 text eller annan data från spelet. Allt läses från din egen skiva av
 *Roll Away (USA)*, *Kula World (Europe)* eller *KulaQuest (Japan)*
-(`.chd` eller `.bin`/`.cue`; en `.iso` går men saknar musik och filmer
-eftersom den inte har XA-sektorerna) när spelet körs. Välj den i launchern
+(`.chd` eller `.bin`/`.cue`; **`.iso` stöds inte**: den saknar XA-sektorerna
+med filmerna och musiken, så skärmen förblir svart) när spelet körs. Välj den i launchern
 med "CHOOSE DISC" eller dra in filen i fönstret; launchern ser vilken
 utgåva det är och kontrollerar att den är samma som porten gjordes från.
 

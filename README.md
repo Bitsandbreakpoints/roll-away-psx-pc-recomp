@@ -39,8 +39,8 @@ All releases are on the [Releases page](https://github.com/Bitsandbreakpoints/ro
 1. Download `roll-away-pc.zip` and unzip it anywhere.
 2. Start `roll_away.exe` (Windows 10 or later; no installation).
 3. Click **CHOOSE DISC** and pick your disc image, or drop it on the window.
-   `.bin`/`.cue` and `.chd` work (an `.iso` works too, but without music
-   and movies: it holds no XA sectors). The launcher checks that the image
+   Use a `.bin`/`.cue` or `.chd` image. **`.iso` images are not
+   supported** (the screen stays black). The launcher checks that the image
    is *Roll Away (USA)*, *Kula World (Europe)* or *KulaQuest (Japan)*, and
    which of them.
 4. Click **PLAY**, or **LEVEL EDITOR** to make levels of your own.
@@ -161,7 +161,7 @@ respective owners.*
   keyboard or controller.
 - **Controls**: keyboard or XInput controllers (Xbox and compatible), two
   players, every button remappable, automatic mapping.
-- **Disc images**: `.bin`/`.cue`, `.chd` (compressed) and `.iso`.
+- **Disc images**: `.bin`/`.cue` and `.chd` (compressed). Not `.iso`.
 - **Memory card in a file**: `roll_away_card1.mcd` next to the program, in
   the raw format emulators use. No BIOS needed.
 - **Your own levels**: a 3D [level editor](#level-editor), and the game
@@ -306,9 +306,11 @@ a Japanese console.
 `roll_away_card1.mcd` holds the saves of each release side by side; each
 release sees only its own.
 
-**Why is there no music with my .iso?** The music and the movies are XA
-sectors, which an `.iso` image does not keep. Use a `.bin`/`.cue` or
-`.chd` image.
+**Can I use an .iso image?** No, the screen stays black. The game streams
+its movies and music from the disc as XA sectors, and an `.iso` image does
+not keep them, so the game waits for data that never comes. Make a
+`.bin`/`.cue` or `.chd` image of your disc instead (a `.chd` can be made
+from a `.bin`/`.cue` with `chdman createcd`).
 
 **Is the source code available?** Yes, in [`source/`](source), and it can
 be built: see [Source code](#source-code).
