@@ -14,10 +14,13 @@ sectors far larger than the exe) - at every offset.  Any hit stops the packing.
 (The exe contains the executable's code translated to x86, but none of
 its bytes: data and tables are read from the disc when the game runs.)
 Settings and logs from test runs never go in (only the files listed here
-are packed).
+are packed).  The packed executables are stripped (llvm-strip --strip-all:
+no debug information or symbol table, the same code); the ones in build/
+keep them for debugging.
 """
 import os
 import struct
+import subprocess
 import sys
 import zipfile
 
@@ -27,6 +30,7 @@ EDITOR_EXE = os.path.join(HERE, 'build', 'roll_away_editor.exe')
 OUT_DIR = os.path.join(HERE, 'build', 'package')
 ZIP_NAME = 'roll-away-pc.zip'
 FOLDER = 'Roll Away PC'
+STRIP = os.path.join(HERE, 'tools', 'llvm-mingw', 'bin', 'llvm-strip.exe')
 
 BLOCK = 64
 MAX_SCANNED_FILE = 4 * 1024 * 1024  # (the STR movies and XA music: streamed audio/video)
@@ -153,9 +157,21 @@ def license_text(source, start):
     return text
 
 
+def stripped(path):
+    """The executable without its debug information and symbol table
+    (~4 MB smaller; the code is the same)."""
+    os.makedirs(OUT_DIR, exist_ok=True)
+    out = os.path.join(OUT_DIR, os.path.basename(path))
+    subprocess.run([STRIP, '--strip-all', '-o', out, path], check=True)
+    data = read(out)
+    os.remove(out)
+    print(f'strip: {os.path.basename(path)} {os.path.getsize(path) // 1024} KB -> {len(data) // 1024} KB')
+    return data
+
+
 def main():
-    exe = read(EXE)
-    editor = read(EDITOR_EXE) if os.path.exists(EDITOR_EXE) else None
+    exe = stripped(EXE)
+    editor = stripped(EDITOR_EXE) if os.path.exists(EDITOR_EXE) else None
     for name, data in (('roll_away.exe', exe), ('roll_away_editor.exe', editor)):
         if data is None:
             continue

@@ -5,3 +5,31 @@
 #include "resources.h"
 
 IDI_APP ICON "assets/icon/roll_away.ico"
+
+/* the exe's properties (Explorer: Properties > Details) */
+1 VERSIONINFO
+FILEVERSION RA_VERSION_MAJOR, RA_VERSION_MINOR, RA_VERSION_PATCH, 0
+PRODUCTVERSION RA_VERSION_MAJOR, RA_VERSION_MINOR, RA_VERSION_PATCH, 0
+FILEOS 0x40004
+FILETYPE 0x1
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Bitsandbreakpoints"
+            VALUE "FileDescription", "Roll Away PC level editor"
+            VALUE "FileVersion", RA_VERSION_TEXT
+            VALUE "InternalName", "roll_away_editor"
+            VALUE "LegalCopyright", "The PC port's own code: MIT licence. The game is not included."
+            VALUE "OriginalFilename", "roll_away_editor.exe"
+            VALUE "ProductName", "Roll Away PC port"
+            VALUE "ProductVersion", RA_VERSION_TEXT
+            VALUE "Comments", "https://github.com/Bitsandbreakpoints/roll-away-psx-pc-recomp"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

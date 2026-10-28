@@ -11,4 +11,10 @@
 /* launcher background: drawn by tools/make_background.py (our own) */
 #define IDR_LAUNCHER_BACKGROUND 101
 
+/* the version shown in the exe's properties (Details): the release's */
+#define RA_VERSION_MAJOR        2
+#define RA_VERSION_MINOR        3
+#define RA_VERSION_PATCH        2
+#define RA_VERSION_TEXT         "2.3.2"
+
 #endif /* RESOURCES_H */
