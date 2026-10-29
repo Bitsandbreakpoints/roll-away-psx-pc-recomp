@@ -13,7 +13,8 @@ replaced with PC code. No BIOS is needed.
 the menus, Arcade with the levels in 3D, Time Trial, the demo and Load Game
 from the memory card, with the XA music from the disc and the sound
 effects, keyboard or XInput controllers (two players) and graphics at up
-to 4× resolution, bilinear filtering, a soft TV filter or four CRT filters
+to 8× resolution (above 6× only with a very fast
+processor), bilinear filtering, a soft TV filter or four CRT filters
 (CRT, Soft CRT, Composite CRT, PVM), an optional widescreen mode (16:9),
 true colour (no dithering), detailed distant textures and anti-aliasing
 (FXAA). F1 (or

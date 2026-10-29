@@ -22,7 +22,9 @@
 extern "C" {
 #endif
 
-#define HIRES_MAX_SCALE         4       /* (higher does not keep 60 fps with software drawing) */
+#define HIRES_MAX_SCALE         8       /* 2560 x 1920; the copy of VRAM is then 128 MB */
+#define HIRES_FAST_SCALE        6       /* above it the launcher warns: 60 fps needs a very
+                                           fast processor (software drawing) */
 
 /* One primitive's drawing attributes (shared with gpu.c). */
 typedef struct {

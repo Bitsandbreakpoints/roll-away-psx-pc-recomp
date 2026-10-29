@@ -97,7 +97,9 @@ pause menu).
 
 **Pictures**
 - **A steady 60 frames a second**, also at 4× with every enhancement on.
-- **Higher internal resolution**, up to 4×.
+- **Higher internal resolution**, up to 8× (2560 × 1920). Above 6× it needs a
+  very fast processor: an 8-core desktop CPU draws 8× at about 40 to 45 frames a
+  second.
 - **Precise vertices**: no PS1 "wobble", perspective-correct textures.
 - **True colour**: smooth shading and transparency in 8 bits per colour,
   without the console's dithering pattern.

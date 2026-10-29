@@ -164,6 +164,17 @@ static void note(const char *text)
     ImGui::TextDisabled("%s", text);
 }
 
+/* a note under a full-width control (a slider), in the control's column */
+static void note_below(const char *text, int warning)
+{
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ROW_LABEL_WIDTH * ui_scale());
+    if (warning) {
+        ImGui::TextColored(ACCENT_V4, "%s", text);
+    } else {
+        ImGui::TextDisabled("%s", text);
+    }
+}
+
 static void help(const char *text)
 {
     ImGui::Spacing();
@@ -216,6 +227,10 @@ static void graphics_tab(void)
              240 * s->internal_scale);
     row("Internal resolution");
     ImGui::SliderInt("##scale", &s->internal_scale, 1, HIRES_MAX_SCALE, format);
+    if (s->internal_scale > HIRES_FAST_SCALE) {
+        /* (measured at 8x on an 8-core Ryzen 7 9800X3D: 40-45 frames a second) */
+        note_below("Above 6× needs a very fast processor: the game may run below 60 fps", 1);
+    }
     row("Aspect ratio");
     ImGui::Combo("##aspect", &s->aspect, aspects, 3);
     if (s->aspect == ASPECT_WIDESCREEN) {
@@ -226,7 +241,7 @@ static void graphics_tab(void)
     ImGui::BeginDisabled(s->video_filter == UI_VIDEO_SHARP || s->video_filter == UI_VIDEO_BILINEAR);
     row("Filter strength");
     ImGui::SliderInt("##strength", &s->filter_strength, 0, 100, "%d %%");
-    note("TV and CRT filters: lower blends in the plain picture");
+    note_below("TV and CRT filters: lower blends in the plain picture", 0);
     ImGui::EndDisabled();
     row("Anti-aliasing");
     check("##antialias", &s->anti_aliasing);

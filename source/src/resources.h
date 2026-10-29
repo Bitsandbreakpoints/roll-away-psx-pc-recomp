@@ -13,8 +13,8 @@
 
 /* the version shown in the exe's properties (Details): the release's */
 #define RA_VERSION_MAJOR        2
-#define RA_VERSION_MINOR        4
+#define RA_VERSION_MINOR        5
 #define RA_VERSION_PATCH        0
-#define RA_VERSION_TEXT         "2.4.0"
+#define RA_VERSION_TEXT         "2.5.0"
 
 #endif /* RESOURCES_H */
