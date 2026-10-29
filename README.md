@@ -119,6 +119,9 @@ pause menu).
   (a studio monitor: sharp scanlines). A **filter strength** slider tunes
   how much of the TV and CRT filters shows, from the full look down to the
   plain picture.
+- **Anti-aliasing** (FXAA): smooth edges instead of stair steps on the 3D
+  world, applied before the picture filter. A picture larger than the
+  window (4× in a small window) is also averaged evenly when shrunk.
 - **Widescreen (16:9)**, optional: the 3D world is seen wider and keeps its
   proportions, the menus and the HUD keep theirs too (screens of only 2D,
   and the movies, are shown 4:3).

@@ -30,6 +30,12 @@ static ID3D11PixelShader *s_tv;           /* UI_VIDEO_TV */
 static ID3D11PixelShader *s_soft_crt;     /* UI_VIDEO_SOFT_CRT */
 static ID3D11PixelShader *s_composite;    /* UI_VIDEO_COMPOSITE */
 static ID3D11PixelShader *s_pvm;          /* UI_VIDEO_PVM */
+static ID3D11VertexShader *s_full_screen; /* anti-aliasing pass: a triangle over the target */
+static ID3D11PixelShader *s_fxaa;         /* NULL if it did not compile: no anti-aliasing */
+static ID3D11Texture2D *s_smooth;         /* the picture anti-aliased, with mipmaps */
+static ID3D11ShaderResourceView *s_smooth_view;
+static ID3D11RenderTargetView *s_smooth_target;
+static int s_antialias;                   /* s_smooth holds this frame's picture */
 static float s_crt_width;
 static ID3D11Buffer *s_crt_constants;
 static float s_crt_lines;
@@ -361,6 +367,125 @@ float4 main(PS_INPUT input) : SV_Target
 }
 )";
 
+/* Anti-aliasing (ui_video_update): FXAA on the picture at its own
+ * resolution, before the picture filters.  Where the brightness changes
+ * sharply, the edge's direction and its ends are found along it, and the
+ * pixel is sampled across the edge by how far it is from the nearer end -
+ * a stair step becomes a ramp.  Lone bright pixels are blended with their
+ * neighbours (SUBPIXEL).  A triangle over the target, no vertex buffer. */
+static const char FULL_SCREEN_SHADER[] = R"(
+struct VS_OUTPUT
+{
+    float4 pos : SV_POSITION;
+    float2 uv  : TEXCOORD0;
+};
+VS_OUTPUT main(uint id : SV_VertexID)
+{
+    VS_OUTPUT output;
+    output.uv = float2((id << 1) & 2, id & 2);
+    output.pos = float4(output.uv * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
+    return output;
+}
+)";
+
+static const char FXAA_SHADER[] = R"(
+struct PS_INPUT
+{
+    float4 pos : SV_POSITION;
+    float2 uv  : TEXCOORD0;
+};
+sampler sampler0;
+Texture2D texture0;
+
+static const float EDGE_MIN = 0.0312;   /* darker contrasts are left alone */
+static const float EDGE_SHARE = 0.125;  /* ... and those under 1/8 of the brightest */
+static const float SUBPIXEL = 0.75;
+static const float3 LUMA = float3(0.299, 0.587, 0.114);
+#define SEARCH_STEPS 12
+static const float STEP_SIZE[SEARCH_STEPS] = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.5, 2.0, 2.0, 2.0, 2.0, 4.0, 8.0 };
+
+float luma_at(float2 uv)
+{
+    return dot(texture0.SampleLevel(sampler0, uv, 0).rgb, LUMA);
+}
+
+float neighbour(float2 uv, int2 offset)
+{
+    return dot(texture0.SampleLevel(sampler0, uv, 0, offset).rgb, LUMA);
+}
+
+float4 main(PS_INPUT input) : SV_Target
+{
+    float width, height;
+    texture0.GetDimensions(width, height);
+    float2 texel = float2(1.0 / width, 1.0 / height);
+    float2 uv = input.uv;
+    float3 centre = texture0.SampleLevel(sampler0, uv, 0).rgb;
+    float m = dot(centre, LUMA);
+    float n = neighbour(uv, int2(0, -1)), s = neighbour(uv, int2(0, 1));
+    float w = neighbour(uv, int2(-1, 0)), e = neighbour(uv, int2(1, 0));
+    float lo = min(m, min(min(n, s), min(w, e)));
+    float hi = max(m, max(max(n, s), max(w, e)));
+    float range = hi - lo;
+    if (range < max(EDGE_MIN, hi * EDGE_SHARE)) {
+        return float4(centre, 1.0);
+    }
+    float nw = neighbour(uv, int2(-1, -1)), ne = neighbour(uv, int2(1, -1));
+    float sw = neighbour(uv, int2(-1, 1)), se = neighbour(uv, int2(1, 1));
+
+    /* a horizontal edge changes down the picture */
+    float across_x = abs(-2.0 * w + nw + sw) + 2.0 * abs(-2.0 * m + n + s) + abs(-2.0 * e + ne + se);
+    float across_y = abs(-2.0 * n + nw + ne) + 2.0 * abs(-2.0 * m + w + e) + abs(-2.0 * s + sw + se);
+    bool horizontal = across_x >= across_y;
+
+    /* which side the edge is on: the steeper one */
+    float luma1 = horizontal ? n : w, luma2 = horizontal ? s : e;
+    float gradient1 = luma1 - m, gradient2 = luma2 - m;
+    float side = horizontal ? texel.y : texel.x;
+    float local;
+    if (abs(gradient1) >= abs(gradient2)) {
+        side = -side;
+        local = 0.5 * (luma1 + m);
+    } else {
+        local = 0.5 * (luma2 + m);
+    }
+    float threshold = 0.25 * max(abs(gradient1), abs(gradient2));
+
+    /* the edge's two ends, between the two rows (bilinear: their average) */
+    float2 edge = uv + (horizontal ? float2(0.0, 0.5 * side) : float2(0.5 * side, 0.0));
+    float2 along = horizontal ? float2(texel.x, 0.0) : float2(0.0, texel.y);
+    float2 uv1 = edge - along, uv2 = edge + along;
+    float end1 = luma_at(uv1) - local, end2 = luma_at(uv2) - local;
+    bool done1 = abs(end1) >= threshold, done2 = abs(end2) >= threshold;
+    [loop] for (int i = 1; i < SEARCH_STEPS && !(done1 && done2); i++) {
+        if (!done1) {
+            uv1 -= along * STEP_SIZE[i];
+            end1 = luma_at(uv1) - local;
+            done1 = abs(end1) >= threshold;
+        }
+        if (!done2) {
+            uv2 += along * STEP_SIZE[i];
+            end2 = luma_at(uv2) - local;
+            done2 = abs(end2) >= threshold;
+        }
+    }
+    float distance1 = horizontal ? uv.x - uv1.x : uv.y - uv1.y;
+    float distance2 = horizontal ? uv2.x - uv.x : uv2.y - uv.y;
+    bool nearer1 = distance1 < distance2;
+    float offset = 0.5 - min(distance1, distance2) / (distance1 + distance2);
+    /* only if the nearer end goes the other way than this pixel */
+    if (((nearer1 ? end1 : end2) < 0.0) == (m < local)) {
+        offset = 0.0;
+    }
+    float average = (2.0 * (n + s + w + e) + nw + ne + sw + se) / 12.0;
+    float sub = saturate(abs(average - m) / range);
+    sub = (-2.0 * sub + 3.0) * sub * sub;
+    offset = max(offset, sub * sub * SUBPIXEL);
+    uv += horizontal ? float2(0.0, offset * side) : float2(offset * side, 0.0);
+    return float4(texture0.SampleLevel(sampler0, uv, 0).rgb, 1.0);
+}
+)";
+
 static intptr_t ui_message_hook(void *hwnd, unsigned msg, uintptr_t wparam, intptr_t lparam)
 {
     return ImGui_ImplWin32_WndProcHandler((HWND) hwnd, msg, wparam, lparam);
@@ -427,6 +552,92 @@ static ID3D11PixelShader *compile_pixel_shader(ID3D11Device *device, const char 
     return shader;
 }
 
+static void free_smooth(void)
+{
+    if (s_smooth) {
+        s_smooth_target->Release();
+        s_smooth_view->Release();
+        s_smooth->Release();
+        s_smooth_target = NULL;
+        s_smooth_view = NULL;
+        s_smooth = NULL;
+    }
+    s_antialias = 0;
+}
+
+/* The anti-aliasing pass: s_video through FXAA into s_smooth (as large),
+ * then its mipmaps, so that a picture larger than the window is averaged
+ * when shrunk rather than skipping pixels.  The render target is put back;
+ * Dear ImGui sets the rest of the state itself when it draws. */
+static int antialias(int w, int h)
+{
+    ID3D11Device *device = (ID3D11Device *) platform_d3d_device();
+    ID3D11DeviceContext *context = (ID3D11DeviceContext *) platform_d3d_context();
+    if (!s_fxaa || !s_full_screen) {
+        return 0;
+    }
+    D3D11_TEXTURE2D_DESC desc = {};
+    if (s_smooth) {
+        s_smooth->GetDesc(&desc);
+        if ((int) desc.Width != w || (int) desc.Height != h) {
+            free_smooth();
+        }
+    }
+    if (!s_smooth) {
+        desc = {};
+        desc.Width = w;
+        desc.Height = h;
+        desc.MipLevels = 0;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+        desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+        if (FAILED(device->CreateTexture2D(&desc, NULL, &s_smooth))) {
+            s_smooth = NULL;
+            return 0;
+        }
+        if (FAILED(device->CreateShaderResourceView(s_smooth, NULL, &s_smooth_view))
+            || FAILED(device->CreateRenderTargetView(s_smooth, NULL, &s_smooth_target))) {
+            if (s_smooth_view) {
+                s_smooth_view->Release();
+                s_smooth_view = NULL;
+            }
+            s_smooth->Release();
+            s_smooth = NULL;
+            return 0;
+        }
+    }
+
+    ID3D11RenderTargetView *old_target = NULL;
+    ID3D11DepthStencilView *old_depth = NULL;
+    context->OMGetRenderTargets(1, &old_target, &old_depth);
+    D3D11_VIEWPORT viewport = { 0, 0, (float) w, (float) h, 0, 1 };
+    context->OMSetRenderTargets(1, &s_smooth_target, NULL);
+    context->RSSetViewports(1, &viewport);
+    context->RSSetState(NULL);
+    context->OMSetBlendState(NULL, NULL, 0xFFFFFFFF);
+    context->OMSetDepthStencilState(NULL, 0);
+    context->IASetInputLayout(NULL);
+    context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    context->VSSetShader(s_full_screen, NULL, 0);
+    context->GSSetShader(NULL, NULL, 0);
+    context->PSSetShader(s_fxaa, NULL, 0);
+    context->PSSetShaderResources(0, 1, &s_video_view);
+    context->PSSetSamplers(0, 1, &s_trilinear);
+    context->Draw(3, 0);
+    context->OMSetRenderTargets(1, &old_target, old_depth);
+    if (old_target) {
+        old_target->Release();
+    }
+    if (old_depth) {
+        old_depth->Release();
+    }
+    context->GenerateMips(s_smooth_view);
+    return 1;
+}
+
 void ui_init(void)
 {
     float scale = platform_dpi_scale();
@@ -488,6 +699,17 @@ void ui_init(void)
     s_composite = compile_pixel_shader(device, COMPOSITE_SHADER, sizeof(COMPOSITE_SHADER) - 1,
                                        "composite");
     s_pvm = compile_pixel_shader(device, PVM_SHADER, sizeof(PVM_SHADER) - 1, "pvm");
+    s_fxaa = compile_pixel_shader(device, FXAA_SHADER, sizeof(FXAA_SHADER) - 1, "fxaa");
+    {
+        ID3DBlob *code = NULL;
+        if (SUCCEEDED(D3DCompile(FULL_SCREEN_SHADER, sizeof(FULL_SCREEN_SHADER) - 1, "full_screen",
+                                 NULL, NULL, "main", "vs_4_0", D3DCOMPILE_OPTIMIZATION_LEVEL3, 0,
+                                 &code, NULL))) {
+            device->CreateVertexShader(code->GetBufferPointer(), code->GetBufferSize(), NULL,
+                                       &s_full_screen);
+            code->Release();
+        }
+    }
     {
         D3D11_BUFFER_DESC desc = {};
         desc.ByteWidth = 16;
@@ -505,13 +727,18 @@ void ui_shutdown(void)
         s_crt->Release();
         s_crt = NULL;
     }
-    ID3D11PixelShader **shaders[] = { &s_tv, &s_soft_crt, &s_composite, &s_pvm };
+    ID3D11PixelShader **shaders[] = { &s_tv, &s_soft_crt, &s_composite, &s_pvm, &s_fxaa };
     for (ID3D11PixelShader **shader : shaders) {
         if (*shader) {
             (*shader)->Release();
             *shader = NULL;
         }
     }
+    if (s_full_screen) {
+        s_full_screen->Release();
+        s_full_screen = NULL;
+    }
+    free_smooth();
     if (s_crt_constants) {
         s_crt_constants->Release();
         s_crt_constants = NULL;
@@ -638,7 +865,7 @@ void ui_draw_image_cover(ImDrawList *draw, const UiImage *image, ImVec2 p0, ImVe
     draw->AddCallback(ImDrawCallback_ResetRenderState, NULL);
 }
 
-void ui_video_update(const uint32_t *rgba, int w, int h)
+void ui_video_update(const uint32_t *rgba, int w, int h, int antialiased)
 {
     ID3D11Device *device = (ID3D11Device *) platform_d3d_device();
     ID3D11DeviceContext *context = (ID3D11DeviceContext *) platform_d3d_context();
@@ -673,6 +900,11 @@ void ui_video_update(const uint32_t *rgba, int w, int h)
             memcpy((uint8_t *) mapped.pData + y * mapped.RowPitch, rgba + y * w, w * 4);
         }
         context->Unmap(s_video, 0);
+    }
+    if (antialiased) {
+        s_antialias = antialias(w, h);
+    } else if (s_smooth) {
+        free_smooth();
     }
 }
 
@@ -722,6 +954,6 @@ void ui_draw_video(ImDrawList *draw, ImVec2 p0, ImVec2 p1, int filter, int stren
     } else {
         draw->AddCallback(filter == UI_VIDEO_SHARP ? use_point : use_linear, NULL);
     }
-    draw->AddImage((ImTextureID) (uintptr_t) s_video_view, p0, p1);
+    draw->AddImage((ImTextureID) (uintptr_t) (s_antialias ? s_smooth_view : s_video_view), p0, p1);
     draw->AddCallback(ImDrawCallback_ResetRenderState, NULL);
 }

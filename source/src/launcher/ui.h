@@ -50,8 +50,9 @@ enum UiVideoFilter {
  * pixels, drawn into p0..p1 with a filter (enum UiVideoFilter) at
  * `strength` 0..100 (the TV and CRT filters: 0 is the plain picture);
  * `width` and `lines` are its size in the console's pixels (what the CRT
- * and TV filters work in). */
-void ui_video_update(const uint32_t *rgba, int w, int h);
+ * and TV filters work in).  `antialiased`: the picture goes through FXAA
+ * first (smooth edges) and is averaged when shown smaller than it is. */
+void ui_video_update(const uint32_t *rgba, int w, int h, int antialiased);
 void ui_draw_video(ImDrawList *draw, ImVec2 p0, ImVec2 p1, int filter, int strength, int width,
                    int lines);
 

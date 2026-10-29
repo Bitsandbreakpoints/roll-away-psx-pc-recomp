@@ -58,6 +58,7 @@ typedef struct {
     int filter_strength;                /* 0..100: how much of the TV/CRT filter shows */
     int precise_vertices;               /* no PS1 "wobble" */
     int texture_filtering;              /* bilinear, 3D surfaces only */
+    int anti_aliasing;                  /* FXAA on the picture (launcher/ui.cpp) */
 
     /* sound, 0..100 */
     int volume_master;

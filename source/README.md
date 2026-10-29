@@ -15,7 +15,8 @@ from the memory card, with the XA music from the disc and the sound
 effects, keyboard or XInput controllers (two players) and graphics at up
 to 4× resolution, bilinear filtering, a soft TV filter or four CRT filters
 (CRT, Soft CRT, Composite CRT, PVM), an optional widescreen mode (16:9),
-true colour (no dithering) and detailed distant textures. F1 (or
+true colour (no dithering), detailed distant textures and anti-aliasing
+(FXAA). F1 (or
 Select+Start) pauses and opens a menu with the settings and the buttons
 Resume, Back to launcher and Quit game; Tab fast-forwards and Esc goes back
 to the launcher. See `PLAN.md`.

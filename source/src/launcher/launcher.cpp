@@ -228,6 +228,9 @@ static void graphics_tab(void)
     ImGui::SliderInt("##strength", &s->filter_strength, 0, 100, "%d %%");
     note("TV and CRT filters: lower blends in the plain picture");
     ImGui::EndDisabled();
+    row("Anti-aliasing");
+    check("##antialias", &s->anti_aliasing);
+    note("smooth edges (FXAA), before the picture filter; a larger picture is shrunk evenly");
 
     section("3D");
     row("Precise vertices");

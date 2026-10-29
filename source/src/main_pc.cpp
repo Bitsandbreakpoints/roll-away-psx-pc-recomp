@@ -306,7 +306,9 @@ static void draw_picture(int w, int h)
     if (!picture) {
         return;                         /* display off: black */
     }
-    ui_video_update(picture, pw, ph);
+    /* (not the movies: MDEC pictures have no edges to smooth) */
+    ui_video_update(picture, pw, ph, g_settings_pc.anti_aliasing && !gpu_display_is_24bit()
+                                     && !GetEnvironmentVariableA("RA_NATIVE", NULL, 0));
     float x0 = 0, y0 = 0, x1 = (float) w, y1 = (float) h;
     if (g_settings_pc.aspect != ASPECT_STRETCH) {
         float aspect = g_settings_pc.aspect == ASPECT_WIDESCREEN && !gpu_display_is_24bit()

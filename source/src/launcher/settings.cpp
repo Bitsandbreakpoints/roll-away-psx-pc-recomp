@@ -120,6 +120,8 @@ static void set_value(Settings *s, const char *section, const char *key, const c
         else if (strcmp(key, "true_color") == 0) s->true_color = n != 0;
         else if (strcmp(key, "detailed_textures") == 0) s->detailed_textures = n != 0;
         else if (strcmp(key, "texture_filtering") == 0) s->texture_filtering = n != 0;
+        else if (strcmp(key, "anti_aliasing") == 0) s->anti_aliasing = n != 0;
+        else if (strcmp(key, "anti_aliasing") == 0) s->anti_aliasing = n != 0;
     } else if (strcmp(section, "sound") == 0) {
         if (strcmp(key, "master") == 0) s->volume_master = clampi(n, 0, 100);
         else if (strcmp(key, "music") == 0) s->volume_music = clampi(n, 0, 100);
@@ -226,9 +228,10 @@ int settings_save(void)
     fprintf(f, "vsync = %d\n; 1..%d times 320x240\ninternal_scale = %d\n", s->vsync, HIRES_MAX_SCALE,
             s->internal_scale);
     fprintf(f, "; 0 = 4:3, 1 = stretch, 2 = 16:9 widescreen\naspect = %d\n", s->aspect);
-    fprintf(f, "; 0 = sharp, 1 = bilinear, 2 = CRT, 3 = soft TV, 4 = soft CRT, 5 = composite CRT, 6 = PVM\nvideo_filter = %d\n; 0..100: how much of the TV/CRT filter shows\nfilter_strength = %d\nprecise_vertices = %d\ntexture_filtering = %d\n; 1 = 8 bits per colour, no dithering\ntrue_color = %d\n; 1 = distant surfaces with their full-size textures\ndetailed_textures = %d\n\n",
+    fprintf(f, "; 0 = sharp, 1 = bilinear, 2 = CRT, 3 = soft TV, 4 = soft CRT, 5 = composite CRT, 6 = PVM\nvideo_filter = %d\n; 0..100: how much of the TV/CRT filter shows\nfilter_strength = %d\nprecise_vertices = %d\ntexture_filtering = %d\n; 1 = 8 bits per colour, no dithering\ntrue_color = %d\n; 1 = distant surfaces with their full-size textures\ndetailed_textures = %d\n"
+            "; 1 = smooth edges (FXAA)\nanti_aliasing = %d\n\n",
             s->video_filter, s->filter_strength, s->precise_vertices, s->texture_filtering, s->true_color,
-            s->detailed_textures);
+            s->detailed_textures, s->anti_aliasing);
     fprintf(f, "[sound]\nmaster = %d\nmusic = %d\neffects = %d\n\n", s->volume_master,
             s->volume_music, s->volume_effects);
     fprintf(f, "[game]\n; 1 = the save screen after every level, 0 = every fifth (as on the console)\nsave_every_level = %d\n"
