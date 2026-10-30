@@ -85,7 +85,7 @@ controller) pauses and shows the settings with Resume, Back to launcher and
 Quit game, and holding Tab fast-forwards.
 
 Controls (keyboard and XInput controllers, two players), graphics
-(internal resolution up to 8x drawn by the graphics card or the processor, precise vertices, true colour, detailed distant textures, anti-aliasing (FXAA), an optional 16:9
+(internal resolution up to 12x drawn by the graphics card (8x by the processor), precise vertices, true colour, detailed distant textures, anti-aliasing (FXAA), an optional 16:9
 widescreen mode, picture filters such as
 CRT, Soft CRT, Composite CRT and PVM, full screen), sound (separate music and effects volumes) and the
 game (a save point after every level; Timeless Arcade: no time limit, no

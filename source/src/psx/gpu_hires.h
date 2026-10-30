@@ -22,7 +22,9 @@
 extern "C" {
 #endif
 
-#define HIRES_MAX_SCALE         8       /* 2560 x 1920; the copy of VRAM is then 128 MB */
+#define HIRES_MAX_SCALE         12      /* 3840 x 2880, drawn by the graphics card only: its
+                                           copy of VRAM is then 12288 x 6144 (288 MB) */
+#define HIRES_SOFTWARE_SCALE    8       /* the processor's most: 2560 x 1920, 128 MB */
 #define HIRES_FAST_SCALE        6       /* above it the launcher warns: 60 fps needs a very
                                            fast processor (software drawing) */
 
@@ -48,7 +50,8 @@ typedef struct {
     int u, v;
 } HiresVertex;
 
-/* scale 0: off; 1..HIRES_MAX_SCALE.  The copy starts as the original
+/* scale 0: off; 1..HIRES_MAX_SCALE (HIRES_SOFTWARE_SCALE when the processor
+ * draws).  The copy starts as the original
  * VRAM enlarged. */
 void hires_configure(int scale);
 int hires_scale(void);          /* 0 while off */

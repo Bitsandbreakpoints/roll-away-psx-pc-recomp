@@ -129,6 +129,7 @@ void hires_configure(int scale)
         psx_log("GPU: the graphics card cannot draw the copy; drawn by the processor");
         s_gpu = 0;
     }
+    scale = scale > HIRES_SOFTWARE_SCALE ? HIRES_SOFTWARE_SCALE : scale;
     s_width = GPU_VRAM_WIDTH * scale;
     s_height = GPU_VRAM_HEIGHT * scale;
     s_vram = (uint32_t *) malloc((size_t) s_width * s_height * sizeof(uint32_t));

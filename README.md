@@ -97,8 +97,9 @@ pause menu).
 
 **Pictures**
 - **A steady 60 frames a second**, also at 4× with every enhancement on.
-- **Higher internal resolution**, up to 8× (2560 × 1920).
-- **Drawn by the graphics card** (Direct3D 11, the default): 8× at a steady 60
+- **Higher internal resolution**, up to 12× (3840 × 2880) on the graphics card
+  and 8× (2560 × 1920) on the processor. 12× suits a 4K screen.
+- **Drawn by the graphics card** (Direct3D 11, the default): 12× at a steady 60
   frames a second with the processor almost idle. The processor can draw it
   instead (SETTINGS > Picture > Renderer); then 8× needs a very fast one.
 - **Precise vertices**: no PS1 "wobble", perspective-correct textures.
@@ -140,6 +141,7 @@ textures, anti-aliasing and widescreen on; Ryzen 7 9800X3D, Radeon RX 9070 XT):
 | Processor | 8× (2560 × 1920) | 43 | 64 % | 1 % |
 | Graphics card | 4× (1280 × 960) | 60 | 1.7 % | 3 % |
 | Graphics card | 8× (2560 × 1920) | 60 | 1.7 % | 5 % |
+| Graphics card | 12× (3840 × 2880) | 60 | 1.9 % | 8 % |
 
 *Processor: the share of the whole processor (8 cores, 16 threads) the game
 uses; graphics card: the share of its 3D engine (Windows performance counters).*

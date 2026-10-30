@@ -13,9 +13,9 @@ replaced with PC code. No BIOS is needed.
 the menus, Arcade with the levels in 3D, Time Trial, the demo and Load Game
 from the memory card, with the XA music from the disc and the sound
 effects, keyboard or XInput controllers (two players) and graphics at up
-to 8× resolution, drawn by the graphics card (Direct3D 11, the default: 8×
-at 60 fps with the processor almost idle) or by the processor (above 6×
-only a very fast one keeps 60 fps), bilinear filtering, a soft TV filter or four CRT filters
+to 12× resolution, drawn by the graphics card (Direct3D 11, the default: 12×
+at 60 fps with the processor almost idle) or by the processor (up to 8×;
+above 6× only a very fast one keeps 60 fps), bilinear filtering, a soft TV filter or four CRT filters
 (CRT, Soft CRT, Composite CRT, PVM), an optional widescreen mode (16:9),
 true colour (no dithering), detailed distant textures and anti-aliasing
 (FXAA). F1 (or
