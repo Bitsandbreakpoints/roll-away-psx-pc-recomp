@@ -13,8 +13,9 @@ replaced with PC code. No BIOS is needed.
 the menus, Arcade with the levels in 3D, Time Trial, the demo and Load Game
 from the memory card, with the XA music from the disc and the sound
 effects, keyboard or XInput controllers (two players) and graphics at up
-to 8× resolution (above 6× only with a very fast
-processor), bilinear filtering, a soft TV filter or four CRT filters
+to 8× resolution, drawn by the graphics card (Direct3D 11, the default: 8×
+at 60 fps with the processor almost idle) or by the processor (above 6×
+only a very fast one keeps 60 fps), bilinear filtering, a soft TV filter or four CRT filters
 (CRT, Soft CRT, Composite CRT, PVM), an optional widescreen mode (16:9),
 true colour (no dithering), detailed distant textures and anti-aliasing
 (FXAA). F1 (or
@@ -83,7 +84,7 @@ disc.
 | Recompiler | `recomp/` | Python: MIPS R3000A + GTE to C, one C function per game function, jump tables as `switch` |
 | Configuration | `recomp/config/main.cfg`, `eu.cfg`, `jp.cfg` | SHA1, which Sony functions are replaced (`hle`), signature names, hooks |
 | Run-time | `src/runtime/` | CPU registers, memory, interrupts/VSync, BIOS functions, replacements for LIBGPU, LIBCD (a real-time CD drive, XA, St* streaming), LIBPRESS, LIBPAD, LIBMCRD |
-| PS1 hardware in software | `src/psx/` | GPU (with a high-resolution copy), GTE, SPU, MDEC, XA-ADPCM |
+| PS1 hardware in software | `src/psx/` | GPU (with a high-resolution copy, drawn by the processor or by Direct3D 11), GTE, SPU, MDEC, XA-ADPCM |
 | PC | `src/platform/`, `src/launcher/`, `src/disc/` | window, Direct3D 11, XInput, XAudio2, launcher, disc reader (bin/cue/chd) |
 | Your own levels | `src/level/`, `src/runtime/custom_level.c`, `src/editor/` | the `.rlv` format, the level in the game, the level editor |
 

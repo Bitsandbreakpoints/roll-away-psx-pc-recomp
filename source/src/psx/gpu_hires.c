@@ -12,6 +12,7 @@
 #include <string.h>
 #include "psx/gpu.h"
 #include "psx/gpu_hires.h"
+#include "psx/gpu_hires_d3d11.h"
 #include "psx/log.h"
 #include "platform/threads.h"
 
@@ -71,6 +72,7 @@ typedef struct {
 } Command;
 
 static int s_scale;
+static int s_gpu;                       /* drawn by the graphics card (gpu_hires_d3d11.cpp) */
 static int s_texture_filter;
 static int s_width, s_height;           /* of the copy */
 /* The copy's pixels: 8 bits per colour (R in the low byte, then G, B)
@@ -102,6 +104,7 @@ int hires_scale(void)
 void hires_set_texture_filter(int on)
 {
     s_texture_filter = on;
+    hwr_set_texture_filter(on);
 }
 
 void hires_configure(int scale)
@@ -110,12 +113,21 @@ void hires_configure(int scale)
     if (scale == s_scale) {
         return;
     }
+    hwr_shutdown();
     free(s_vram);
     s_vram = NULL;
     s_queued = 0;
     s_scale = 0;
     if (scale == 0) {
         return;
+    }
+    if (s_gpu) {
+        if (hwr_init(scale)) {
+            s_scale = scale;
+            return;
+        }
+        psx_log("GPU: the graphics card cannot draw the copy; drawn by the processor");
+        s_gpu = 0;
     }
     s_width = GPU_VRAM_WIDTH * scale;
     s_height = GPU_VRAM_HEIGHT * scale;
@@ -137,6 +149,28 @@ void hires_configure(int scale)
 void hires_set_true_color(int on)
 {
     s_true_color = on;
+    hwr_set_true_color(on);
+}
+
+void hires_set_gpu(int on)
+{
+    on = on != 0;
+    if (on != s_gpu) {
+        int scale = s_scale;
+        hires_configure(0);
+        s_gpu = on;
+        hires_configure(scale);
+    }
+}
+
+int hires_on_gpu(void)
+{
+    return s_gpu && s_scale;
+}
+
+void *hires_picture(int x, int y, int w, int h)
+{
+    return s_gpu ? hwr_picture(x, y, w, h) : NULL;
 }
 
 static uint32_t *pixel_at(int x, int y)
@@ -424,6 +458,10 @@ void hires_triangle(const GpuPrim *p, const GpuEnv *e, const HiresVertex *v0,
     const HiresVertex *v[3] = { v0, v1, v2 };
     int64_t fx[3], fy[3];
 
+    if (s_gpu) {
+        hwr_triangle(p, e, v0, v1, v2);
+        return;
+    }
     if (!s_scale) {
         return;
     }
@@ -602,6 +640,10 @@ void hires_rectangle(const GpuPrim *p, const GpuEnv *e, int x, int y, int w, int
                      int r, int g, int b, int u0, int v0, int flip_x, int flip_y)
 {
     int x1, y1, x2, y2;
+    if (s_gpu) {
+        hwr_rectangle(p, e, x, y, w, h, r, g, b, u0, v0, flip_x, flip_y);
+        return;
+    }
     if (!s_scale || w <= 0 || h <= 0) {
         return;
     }
@@ -650,6 +692,10 @@ static void draw_rectangle(const Command *c, int band_y1, int band_y2)
 
 void hires_line(const GpuPrim *p, const GpuEnv *e, const HiresVertex *a, const HiresVertex *b)
 {
+    if (s_gpu) {
+        hwr_line(p, e, a, b);
+        return;
+    }
     if (!s_scale) {
         return;
     }
@@ -736,8 +782,8 @@ static const uint8_t BAYER4[4][4] = {
 void hires_ball(BallRecord *ball, const GpuEnv *e, int off_x, int off_y)
 {
     int x1, y1, x2, y2;
-    if (!s_scale) {
-        return;
+    if (!s_scale || s_gpu) {
+        return;                         /* (the smooth balls are American Pool's; drawn as models here) */
     }
     if (ball->queued == s_generation + 1) {
         Command moved = s_queue[ball->command];
@@ -938,6 +984,10 @@ static void draw_sphere(const Command *c, int band_y1, int band_y2)
 
 void hires_fill(int x, int y, int w, int h, uint16_t color)
 {
+    if (s_gpu) {
+        hwr_fill(x, y, w, h, color);
+        return;
+    }
     if (!s_scale || w <= 0 || h <= 0) {
         return;
     }
@@ -965,6 +1015,10 @@ static void draw_fill(const Command *c, int band_y1, int band_y2)
 
 void hires_copy_from_original(int x, int y, int w, int h)
 {
+    if (s_gpu) {
+        hwr_copy_from_original(x, y, w, h);
+        return;
+    }
     if (!s_scale) {
         return;
     }
@@ -986,6 +1040,10 @@ void hires_copy_from_original(int x, int y, int w, int h)
 
 void hires_move(int sx, int sy, int dx, int dy, int w, int h, int set_mask, int check_mask)
 {
+    if (s_gpu) {
+        hwr_move(sx, sy, dx, dy, w, h, set_mask, check_mask);
+        return;
+    }
     if (!s_scale) {
         return;
     }
@@ -1030,12 +1088,19 @@ static void draw_band(int band, void *context)
 
 void hires_discard(void)
 {
+    if (s_gpu) {
+        hwr_discard();
+    }
     s_queued = 0;
     s_generation++;
 }
 
 void hires_flush(void)
 {
+    if (s_gpu) {
+        hwr_flush();
+        return;
+    }
     if (!s_scale || s_queued == 0) {
         s_queued = 0;
         return;
@@ -1090,6 +1155,10 @@ static void read_rows(int task, void *context)
 
 void hires_read(uint32_t *out, int x, int y, int w, int h)
 {
+    if (s_gpu) {
+        hwr_read(out, x, y, w, h);
+        return;
+    }
     ReadJob job = { out, x * s_scale, y * s_scale, w * s_scale, h * s_scale, 0 };
     int tasks = threads_count();
     hires_flush();

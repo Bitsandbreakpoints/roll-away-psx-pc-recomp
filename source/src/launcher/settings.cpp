@@ -59,6 +59,7 @@ void settings_defaults(Settings *s)
     s->window_mode = WINDOW_MODE_WINDOWED;
     s->vsync = 1;
     s->internal_scale = 4;
+    s->renderer = RENDERER_GPU;         /* (falls back to the processor if the card cannot) */
     s->aspect = ASPECT_4_3;
     s->video_filter = 0;
     s->filter_strength = 100;
@@ -112,6 +113,7 @@ static void set_value(Settings *s, const char *section, const char *key, const c
         else if (strcmp(key, "window_mode") == 0) s->window_mode = clampi(n, 0, 1);
         else if (strcmp(key, "vsync") == 0) s->vsync = n != 0;
         else if (strcmp(key, "internal_scale") == 0) s->internal_scale = clampi(n, 1, HIRES_MAX_SCALE);
+        else if (strcmp(key, "renderer") == 0) s->renderer = clampi(n, 0, RENDERER_COUNT - 1);
         else if (strcmp(key, "aspect") == 0) s->aspect = clampi(n, 0, 2);
         else if (strcmp(key, "smooth_filtering") == 0) s->video_filter = n != 0;   /* (older) */
         else if (strcmp(key, "video_filter") == 0) s->video_filter = clampi(n, 0, VIDEO_FILTER_COUNT - 1);
@@ -120,7 +122,6 @@ static void set_value(Settings *s, const char *section, const char *key, const c
         else if (strcmp(key, "true_color") == 0) s->true_color = n != 0;
         else if (strcmp(key, "detailed_textures") == 0) s->detailed_textures = n != 0;
         else if (strcmp(key, "texture_filtering") == 0) s->texture_filtering = n != 0;
-        else if (strcmp(key, "anti_aliasing") == 0) s->anti_aliasing = n != 0;
         else if (strcmp(key, "anti_aliasing") == 0) s->anti_aliasing = n != 0;
     } else if (strcmp(section, "sound") == 0) {
         if (strcmp(key, "master") == 0) s->volume_master = clampi(n, 0, 100);
@@ -225,8 +226,9 @@ int settings_save(void)
     fprintf(f, "[disc]\npath = %s\n\n", s->disc_path);
     fprintf(f, "[graphics]\nwindow_width = %d\nwindow_height = %d\n", s->window_width, s->window_height);
     fprintf(f, "; 0 = window, 1 = borderless full screen\nwindow_mode = %d\n", s->window_mode);
-    fprintf(f, "vsync = %d\n; 1..%d times 320x240\ninternal_scale = %d\n", s->vsync, HIRES_MAX_SCALE,
-            s->internal_scale);
+    fprintf(f, "vsync = %d\n; 0 = the processor draws the internal resolution, 1 = the graphics card\n"
+            "renderer = %d\n; 1..%d times 320x240\ninternal_scale = %d\n", s->vsync, s->renderer,
+            HIRES_MAX_SCALE, s->internal_scale);
     fprintf(f, "; 0 = 4:3, 1 = stretch, 2 = 16:9 widescreen\naspect = %d\n", s->aspect);
     fprintf(f, "; 0 = sharp, 1 = bilinear, 2 = CRT, 3 = soft TV, 4 = soft CRT, 5 = composite CRT, 6 = PVM\nvideo_filter = %d\n; 0..100: how much of the TV/CRT filter shows\nfilter_strength = %d\nprecise_vertices = %d\ntexture_filtering = %d\n; 1 = 8 bits per colour, no dithering\ntrue_color = %d\n; 1 = distant surfaces with their full-size textures\ndetailed_textures = %d\n"
             "; 1 = smooth edges (FXAA)\nanti_aliasing = %d\n\n",

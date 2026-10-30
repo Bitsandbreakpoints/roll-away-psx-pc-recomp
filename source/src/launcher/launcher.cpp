@@ -223,11 +223,14 @@ static void graphics_tab(void)
     }
 
     section("PICTURE");
+    const char *renderers[] = { "Processor (software)", "Graphics card (Direct3D 11)" };
+    row("Renderer");
+    ImGui::Combo("##renderer", &s->renderer, renderers, RENDERER_COUNT);
     snprintf(format, sizeof(format), "%%d×    (%d × %d)", 320 * s->internal_scale,
              240 * s->internal_scale);
     row("Internal resolution");
     ImGui::SliderInt("##scale", &s->internal_scale, 1, HIRES_MAX_SCALE, format);
-    if (s->internal_scale > HIRES_FAST_SCALE) {
+    if (s->renderer == RENDERER_SOFTWARE && s->internal_scale > HIRES_FAST_SCALE) {
         /* (measured at 8x on an 8-core Ryzen 7 9800X3D: 40-45 frames a second) */
         note_below("Above 6× needs a very fast processor: the game may run below 60 fps", 1);
     }
@@ -262,8 +265,9 @@ static void graphics_tab(void)
     row("Detailed distant textures");
     check("##lodtextures", &s->detailed_textures);
     note("distant blocks with their full-size textures, not the game's small copies");
-    help("The internal resolution is drawn in software on all cores; high values need a fast "
-         "processor. Everything here can be changed during the game with F1.");
+    help("The renderer draws the internal resolution: the processor on all its cores (high values "
+         "need a fast processor), or the graphics card, which keeps 8× at 60 fps and leaves the "
+         "processor almost idle. Everything here can be changed during the game with F1.");
 }
 
 static const char *device_name(int device)

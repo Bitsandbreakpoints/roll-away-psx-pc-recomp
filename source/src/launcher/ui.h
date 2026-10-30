@@ -53,6 +53,11 @@ enum UiVideoFilter {
  * and TV filters work in).  `antialiased`: the picture goes through FXAA
  * first (smooth edges) and is averaged when shown smaller than it is. */
 void ui_video_update(const uint32_t *rgba, int w, int h, int antialiased);
+
+/* The same, from a texture already on the graphics card (an
+ * ID3D11ShaderResourceView * of w x h, the GPU renderer's), not copied:
+ * it must stay valid until the frame has been drawn. */
+void ui_video_use(void *view, int w, int h, int antialiased);
 void ui_draw_video(ImDrawList *draw, ImVec2 p0, ImVec2 p1, int filter, int strength, int width,
                    int lines);
 

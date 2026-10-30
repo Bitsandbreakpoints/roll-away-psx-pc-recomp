@@ -52,6 +52,10 @@ void gpu_set_display_enabled(int enabled);
  */
 const uint32_t *gpu_display_rgba(int *w, int *h);
 
+/* The same picture as a texture of the graphics card (ID3D11ShaderResourceView *)
+ * when the GPU renderer draws it; NULL otherwise (gpu_display_rgba() then). */
+void *gpu_display_view(int *w, int *h);
+
 /* The displayed picture's size in the console's pixels (320 x 240 here). */
 int gpu_display_width(void);
 
@@ -70,6 +74,10 @@ int gpu_display_lines(void);
  * bilinear filtering of 3D textures (needs precise vertices); (1, 0, 0)
  * draws only the original VRAM. */
 void gpu_set_enhancements(int scale, int precise_vertices, int texture_filter);
+
+/* The high-resolution copy drawn by the graphics card (1) or the
+ * processor (0).  Before gpu_set_enhancements(). */
+void gpu_set_renderer(int on_gpu);
 
 /* True colour: shading and blending in 8 bits per colour, no dithering
  * (the picture shown; the game's own VRAM stays 15-bit).  Before

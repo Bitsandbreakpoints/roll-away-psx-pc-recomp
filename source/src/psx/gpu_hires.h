@@ -53,6 +53,17 @@ typedef struct {
 void hires_configure(int scale);
 int hires_scale(void);          /* 0 while off */
 
+/* The copy drawn by the graphics card (gpu_hires_d3d11.h) instead of the
+ * processor; it falls back to the processor if the card cannot.  Kept
+ * across hires_configure(). */
+void hires_set_gpu(int on);
+int hires_on_gpu(void);         /* on and drawing */
+
+/* An area of the copy (original pixels) as a texture for the window
+ * (ID3D11ShaderResourceView *, w*scale x h*scale), drawn; NULL unless the
+ * graphics card draws the copy. */
+void *hires_picture(int x, int y, int w, int h);
+
 /* Bilinear texture filtering for 3D polygons (those whose three vertices
  * have a depth from the GTE); 2D graphics stay sharp. */
 void hires_set_texture_filter(int on);

@@ -38,7 +38,11 @@ def main():
     try:
         text = open(ini, encoding='utf-8').read()
         for key, value in ini_changes.items():
-            text = re.sub(r'(?m)^%s = .*$' % re.escape(key), '%s = %s' % (key, value), text)
+            if re.search(r'(?m)^%s = ' % re.escape(key), text):
+                text = re.sub(r'(?m)^%s = .*$' % re.escape(key), '%s = %s' % (key, value), text)
+            else:
+                # (a setting the file does not have yet: graphics ones are the usual case)
+                text = text.replace('[graphics]\n', '[graphics]\n%s = %s\n' % (key, value), 1)
         open(ini, 'w', encoding='utf-8').write(text)
         proc = subprocess.Popen([EXE], cwd=out, env=env)
         start = time.time()

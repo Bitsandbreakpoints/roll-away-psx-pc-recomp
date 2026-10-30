@@ -302,13 +302,19 @@ static void debug_dump_vram(void)
 static void draw_picture(int w, int h)
 {
     int pw, ph;
-    const uint32_t *picture = gpu_display_rgba(&pw, &ph);
-    if (!picture) {
-        return;                         /* display off: black */
-    }
     /* (not the movies: MDEC pictures have no edges to smooth) */
-    ui_video_update(picture, pw, ph, g_settings_pc.anti_aliasing && !gpu_display_is_24bit()
-                                     && !GetEnvironmentVariableA("RA_NATIVE", NULL, 0));
+    int antialiased = g_settings_pc.anti_aliasing && !gpu_display_is_24bit()
+                      && !GetEnvironmentVariableA("RA_NATIVE", NULL, 0);
+    void *view = gpu_display_view(&pw, &ph);
+    if (view) {
+        ui_video_use(view, pw, ph, antialiased);      /* (the GPU renderer: no copy through memory) */
+    } else {
+        const uint32_t *picture = gpu_display_rgba(&pw, &ph);
+        if (!picture) {
+            return;                     /* display off: black */
+        }
+        ui_video_update(picture, pw, ph, antialiased);
+    }
     float x0 = 0, y0 = 0, x1 = (float) w, y1 = (float) h;
     if (g_settings_pc.aspect != ASPECT_STRETCH) {
         float aspect = g_settings_pc.aspect == ASPECT_WIDESCREEN && !gpu_display_is_24bit()
@@ -368,6 +374,7 @@ static void apply_game_settings(void)
                    &g_prim_trace[3], &g_prim_trace[4], &g_prim_trace[5]);
         }
         gpu_set_widescreen(g_settings_pc.aspect == ASPECT_WIDESCREEN);
+        gpu_set_renderer(g_settings_pc.renderer == RENDERER_GPU);
         gpu_set_enhancements(g_settings_pc.internal_scale, g_settings_pc.precise_vertices,
                              g_settings_pc.texture_filtering);
     }

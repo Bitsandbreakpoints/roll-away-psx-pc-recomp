@@ -33,6 +33,13 @@ enum AspectMode {
     ASPECT_WIDESCREEN = 2           /* 16:9, the 3D squeezed by the GTE (gte_set_widescreen) */
 };
 
+/* Settings.renderer: who draws the high-resolution copy (psx/gpu_hires.h) */
+enum Renderer {
+    RENDERER_SOFTWARE = 0,          /* the processor, on all cores */
+    RENDERER_GPU = 1,               /* the graphics card (Direct3D 11) */
+    RENDERER_COUNT
+};
+
 typedef struct {
     int device;                         /* enum InputDevice */
     int keys[PSX_BUTTON_COUNT];         /* virtual key codes */
@@ -50,6 +57,7 @@ typedef struct {
     int window_width, window_height;
     int window_mode;                    /* enum WindowMode */
     int vsync;
+    int renderer;                       /* enum Renderer: who draws the internal resolution */
     int internal_scale;                 /* 1..HIRES_MAX_SCALE times 320x240 */
     int aspect;                         /* enum AspectMode */
     int true_color;                     /* 8 bits per colour, no dithering */

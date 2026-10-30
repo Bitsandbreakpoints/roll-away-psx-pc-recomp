@@ -125,6 +125,11 @@ void gpu_set_enhancements(int scale, int precise_vertices, int texture_filter)
     hires_set_texture_filter(precise_vertices && texture_filter);
 }
 
+void gpu_set_renderer(int on_gpu)
+{
+    hires_set_gpu(on_gpu);
+}
+
 void gpu_skip_frame(void)
 {
     hires_discard();
@@ -1277,6 +1282,16 @@ const uint32_t *gpu_display_rgba(int *w, int *h)
         }
     }
     return s_picture;
+}
+
+void *gpu_display_view(int *w, int *h)
+{
+    if (!s.disp_on || s.disp_w <= 0 || s.disp_h <= 0 || s.disp_rgb24 || !hires_on_gpu()) {
+        return NULL;
+    }
+    *w = s.disp_w * hires_scale();
+    *h = s.disp_h * hires_scale();
+    return hires_picture(s.disp_x, s.disp_y, s.disp_w, s.disp_h);
 }
 
 /* ---- debugging -------------------------------------------------------- */

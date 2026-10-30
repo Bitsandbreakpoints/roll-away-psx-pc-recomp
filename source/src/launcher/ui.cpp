@@ -25,6 +25,8 @@ static ID3D11SamplerState *s_point;       /* sharp game pixels */
 static ID3D11Texture2D *s_video;          /* the game's picture */
 static ID3D11ShaderResourceView *s_video_view;
 static int s_video_w, s_video_h;
+static ID3D11ShaderResourceView *s_video_given;    /* ui_video_use(): drawn instead of s_video
+                                                     (held: the renderer may be switched off) */
 static ID3D11PixelShader *s_crt;          /* UI_VIDEO_CRT; NULL if it did not compile */
 static ID3D11PixelShader *s_tv;           /* UI_VIDEO_TV */
 static ID3D11PixelShader *s_soft_crt;     /* UI_VIDEO_SOFT_CRT */
@@ -552,6 +554,12 @@ static ID3D11PixelShader *compile_pixel_shader(ID3D11Device *device, const char 
     return shader;
 }
 
+/* the picture this frame: given (GPU renderer) or uploaded */
+static ID3D11ShaderResourceView *video_view(void)
+{
+    return s_video_given ? s_video_given : s_video_view;
+}
+
 static void free_smooth(void)
 {
     if (s_smooth) {
@@ -624,9 +632,12 @@ static int antialias(int w, int h)
     context->VSSetShader(s_full_screen, NULL, 0);
     context->GSSetShader(NULL, NULL, 0);
     context->PSSetShader(s_fxaa, NULL, 0);
-    context->PSSetShaderResources(0, 1, &s_video_view);
+    ID3D11ShaderResourceView *view = video_view();
+    context->PSSetShaderResources(0, 1, &view);
     context->PSSetSamplers(0, 1, &s_trilinear);
     context->Draw(3, 0);
+    view = NULL;
+    context->PSSetShaderResources(0, 1, &view);
     context->OMSetRenderTargets(1, &old_target, old_depth);
     if (old_target) {
         old_target->Release();
@@ -723,6 +734,10 @@ void ui_init(void)
 void ui_shutdown(void)
 {
     platform_set_message_hook(NULL);
+    if (s_video_given) {
+        s_video_given->Release();
+        s_video_given = NULL;
+    }
     if (s_crt) {
         s_crt->Release();
         s_crt = NULL;
@@ -871,6 +886,10 @@ void ui_video_update(const uint32_t *rgba, int w, int h, int antialiased)
     ID3D11DeviceContext *context = (ID3D11DeviceContext *) platform_d3d_context();
     D3D11_MAPPED_SUBRESOURCE mapped;
 
+    if (s_video_given) {
+        s_video_given->Release();
+        s_video_given = NULL;
+    }
     if (w != s_video_w || h != s_video_h) {
         if (s_video_view) {
             s_video_view->Release();
@@ -900,6 +919,22 @@ void ui_video_update(const uint32_t *rgba, int w, int h, int antialiased)
             memcpy((uint8_t *) mapped.pData + y * mapped.RowPitch, rgba + y * w, w * 4);
         }
         context->Unmap(s_video, 0);
+    }
+    if (antialiased) {
+        s_antialias = antialias(w, h);
+    } else if (s_smooth) {
+        free_smooth();
+    }
+}
+
+void ui_video_use(void *view, int w, int h, int antialiased)
+{
+    if (view != s_video_given) {
+        if (s_video_given) {
+            s_video_given->Release();
+        }
+        s_video_given = (ID3D11ShaderResourceView *) view;
+        s_video_given->AddRef();
     }
     if (antialiased) {
         s_antialias = antialias(w, h);
@@ -943,7 +978,7 @@ void ui_draw_video(ImDrawList *draw, ImVec2 p0, ImVec2 p1, int filter, int stren
                                 : filter == UI_VIDEO_SOFT_CRT ? s_soft_crt
                                 : filter == UI_VIDEO_COMPOSITE ? s_composite
                                 : filter == UI_VIDEO_PVM ? s_pvm : NULL;
-    if (!s_video_view) {
+    if (!video_view()) {
         return;
     }
     if (shader && s_crt_constants) {
@@ -954,6 +989,6 @@ void ui_draw_video(ImDrawList *draw, ImVec2 p0, ImVec2 p1, int filter, int stren
     } else {
         draw->AddCallback(filter == UI_VIDEO_SHARP ? use_point : use_linear, NULL);
     }
-    draw->AddImage((ImTextureID) (uintptr_t) (s_antialias ? s_smooth_view : s_video_view), p0, p1);
+    draw->AddImage((ImTextureID) (uintptr_t) (s_antialias ? s_smooth_view : video_view()), p0, p1);
     draw->AddCallback(ImDrawCallback_ResetRenderState, NULL);
 }
