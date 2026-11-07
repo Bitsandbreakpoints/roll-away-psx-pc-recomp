@@ -23,6 +23,7 @@
 Editor g_ed;
 
 static HWND s_hwnd;
+static HANDLE s_play_process;
 static bool s_open_disc_dialog, s_show_help, s_show_problems_on_play;
 static int s_disc_world;
 static std::vector<DiscLevel> s_disc_levels;
@@ -31,10 +32,10 @@ static std::string s_disc_error;
 
 static const char *const TOOL_NAMES[TOOL_COUNT] = { "Build", "Erase", "Paint", "Things", "Select" };
 static const char *const TOOL_HINTS[TOOL_COUNT] = {
-    "Click a side of a block: a new block snaps on there (one click, one block).",
-    "Click blocks to take them away.",
-    "Click blocks to make them the chosen kind.",
-    "Click an open side of a block to put the chosen thing on it.",
+    "Click a side of a block to build. Ctrl + left-drag erases blocks, including newly exposed layers.",
+    "Click erases one block. Move at least 8 pixels between further erases while dragging.",
+    "Click blocks to make them the chosen kind. Ctrl + left-click restores one block to normal.",
+    "Click an open side to place a thing. Hold Ctrl to preview; Ctrl + left-drag removes things, keeping their blocks.",
     "Click a block's side to see and change it on the right."
 };
 static const char *const SIDE_NAMES[6] = { "top", "right (+X)", "front (+Z)", "back (-Z)", "left (-X)", "bottom" };
@@ -395,6 +396,41 @@ static void choose_disc()
 
 /* ---- playing ---- */
 
+static BOOL CALLBACK close_play_window(HWND hwnd, LPARAM process_id)
+{
+    DWORD owner;
+    GetWindowThreadProcessId(hwnd, &owner);
+    if (owner == (DWORD) process_id) {
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+    }
+    return TRUE;
+}
+
+static bool stop_play()
+{
+    if (!s_play_process) {
+        return true;
+    }
+    DWORD result = WaitForSingleObject(s_play_process, 0);
+    if (result == WAIT_TIMEOUT) {
+        EnumWindows(close_play_window, (LPARAM) GetProcessId(s_play_process));
+        result = WaitForSingleObject(s_play_process, 2000);
+        if (result == WAIT_TIMEOUT) {
+            /* A stalled game must not leave another preview running. */
+            TerminateProcess(s_play_process, 0);
+            result = WaitForSingleObject(s_play_process, 2000);
+        }
+    }
+    if (result != WAIT_OBJECT_0) {
+        MessageBoxW(s_hwnd, L"The previous game could not be closed. Close it and try Play again.",
+                    L"Roll Away level editor", MB_ICONERROR);
+        return false;
+    }
+    CloseHandle(s_play_process);
+    s_play_process = NULL;
+    return true;
+}
+
 static void play()
 {
     std::vector<Level::Problem> problems = g_ed.level.check();
@@ -425,12 +461,15 @@ static void play()
     PROCESS_INFORMATION pi = {};
     std::vector<wchar_t> line(command.begin(), command.end());
     line.push_back(0);
+    if (!stop_play()) {
+        return;
+    }
     if (!CreateProcessW(exe.c_str(), line.data(), NULL, NULL, FALSE, 0, NULL, folder.c_str(), &si, &pi)) {
         MessageBoxW(s_hwnd, L"The game could not be started.", L"Roll Away level editor", MB_ICONERROR);
         return;
     }
     CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
+    s_play_process = pi.hProcess;
     editor_say("The game starts with the level (Esc in the game comes back).");
 }
 
@@ -1052,12 +1091,17 @@ static void help_window()
     ImGui::SetNextWindowSize(ImVec2(470, 0), ImGuiCond_Appearing);
     if (ImGui::Begin("Controls", &s_show_help, ImGuiWindowFlags_NoCollapse)) {
         ImGui::TextColored(ACCENT, "Camera");
-        ImGui::BulletText("Right button: turn around the level");
+        ImGui::BulletText("Right drag: turn around the level");
         ImGui::BulletText("Middle button or Shift + right button: move");
         ImGui::BulletText("Wheel: closer / farther;  W A S D, Q E: move;  F: look at the selection");
         ImGui::TextColored(ACCENT, "Building");
         ImGui::BulletText("1 Build, 2 Erase, 3 Paint, 4 Things, 5 Select");
         ImGui::BulletText("Build: click a side of a block, the new block snaps to it");
+        ImGui::BulletText("Ctrl + left-drag: erase blocks in Build, things in Things");
+        ImGui::BulletText("Click erases once; drag 8 pixels between further erases");
+        ImGui::BulletText("Erase drags continue through layers; each stroke is one Undo");
+        ImGui::BulletText("Hold Ctrl: preview the block or thing to delete");
+        ImGui::BulletText("Ctrl + left-click in Paint: restore one block to normal");
         ImGui::BulletText("G: the build plane (blocks in the air), PgUp / PgDn its height");
         ImGui::BulletText("R: turn the selected thing;  Delete: take the selection away");
         ImGui::BulletText("Ctrl+Z / Ctrl+Y: undo / redo;  Ctrl+S: save;  F5: play");
@@ -1199,6 +1243,10 @@ bool editor_init(ID3D11Device *device, ID3D11DeviceContext *context, void *hwnd)
 
 void editor_shutdown()
 {
+    if (s_play_process) {
+        CloseHandle(s_play_process);
+        s_play_process = NULL;
+    }
     renderer_shutdown();
 }
 

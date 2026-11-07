@@ -10,7 +10,7 @@ if errorlevel 1 (
   echo Python 3 is needed to build ^(https://www.python.org^).
   exit /b 1
 )
-if not exist "tools\llvm-mingw\bin" python tools\setup.py || exit /b 1
+python tools\setup.py || exit /b 1
 python configure.py %* || exit /b 1
 "tools\ninja\ninja.exe" || exit /b 1
 echo.
