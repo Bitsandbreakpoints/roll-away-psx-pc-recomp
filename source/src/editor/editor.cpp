@@ -763,8 +763,8 @@ static void selection_panel()
                 b->prop[3] = on ? 1 : 2;
                 editor_changed();
             }
-            link_row("Power", &b->laser_power, PICK_LASER_POWER,
-                     "Click the next transporter, button or laser of this power chain.");
+            link_row("Chain next", &b->laser_power, PICK_LASER_POWER,
+                     "Next object toggled after this laser. Leave empty to end the chain.");
         }
     }
     if (b->kind == BLOCK_FLASHING) {
@@ -861,10 +861,12 @@ static void selection_panel()
         }
         if (t.id() == THING_TRANSPORTER) {
             link_row("Destination", &t.target, PICK_TARGET, "Click the transporter it takes the ball to.");
-            link_row("Power", &t.power, PICK_POWER, "Click the next transporter, button or laser of its power chain.");
+            link_row("Chain next", &t.power, PICK_POWER, "Next object toggled after this transporter. Leave empty to end the chain.");
         } else if (t.id() == THING_BUTTON) {
-            link_row("Powers", &t.power, PICK_POWER, "Click what the button switches (a transporter, button or laser).");
-            link_row("Powers 2", &t.target, PICK_TARGET, "Click a second thing the button switches.");
+            link_row("Start chain", &t.target, PICK_TARGET,
+                     "Pressing this button starts switching here. Select this button itself to include its light in the chain.");
+            link_row("Chain next", &t.power, PICK_POWER,
+                     "Next object toggled after this button is toggled by a chain. Leave empty to end the chain.");
         }
     }
     if (ImGui::Button("Take it away")) {

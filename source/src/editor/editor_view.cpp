@@ -745,8 +745,14 @@ static void finish_pick()
         editor_say("Choose a transporter, a button or a laser block.");
         return;
     }
-    if (l.cell == g_ed.sel_cell && l.side == g_ed.sel_side && g_ed.link_pick != PICK_LASER_POWER) {
-        editor_say("A thing cannot refer to itself.");
+    bool same_target = l.cell == g_ed.sel_cell &&
+                       (l.side == g_ed.sel_side || g_ed.link_pick == PICK_LASER_POWER);
+    bool button_start = g_ed.link_pick == PICK_TARGET && from->kind <= BLOCK_ACID &&
+                        from->sides[g_ed.sel_side].id() == THING_BUTTON;
+    if (same_target && !button_start) {
+        editor_say(g_ed.link_pick == PICK_POWER || g_ed.link_pick == PICK_LASER_POWER
+                   ? "Chain next cannot point to itself: the switch chain would never end."
+                   : "A transporter cannot have itself as its destination.");
         return;
     }
     editor_snapshot();
