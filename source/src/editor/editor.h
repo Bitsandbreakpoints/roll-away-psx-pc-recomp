@@ -83,6 +83,7 @@ void editor_world_changed();
 /* editor_view.cpp */
 void view_frame(int width, int height);
 void view_focus();
+void view_cancel_stroke();             /* level replaced: require a fresh mouse press */
 /* the direction a thing faces: rotation 1..4 on `side`, as a vector */
 Vec3 thing_direction(int side, int rotation);
 /* the rotation (1..4) on `side` nearest the camera's forward direction */

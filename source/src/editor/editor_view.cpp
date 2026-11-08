@@ -29,6 +29,14 @@ static int s_stroke_tool, s_stroke_kind, s_stroke_thing, s_stroke_variant;
 static bool s_stroke_ctrl;
 static int s_last_action_cell = -1, s_last_action_side = -1;
 
+void view_cancel_stroke()
+{
+    s_dragging = false;
+    s_erase_stroke = false;
+    s_drag_changed = false;
+    s_last_action_cell = s_last_action_side = -1;
+}
+
 static Vec3 cell_lo(int c)
 {
     int x, y, z;

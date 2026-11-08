@@ -117,6 +117,7 @@ static void undo()
     if (g_ed.undo.empty()) {
         return;
     }
+    view_cancel_stroke();
     g_ed.redo.push_back(g_ed.level);
     int theme = g_ed.level.settings.theme;
     g_ed.level = g_ed.undo.back();
@@ -132,6 +133,7 @@ static void redo()
     if (g_ed.redo.empty()) {
         return;
     }
+    view_cancel_stroke();
     g_ed.undo.push_back(g_ed.level);
     int theme = g_ed.level.settings.theme;
     g_ed.level = g_ed.redo.back();
