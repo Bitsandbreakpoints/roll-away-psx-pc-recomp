@@ -608,6 +608,7 @@ static void left_panel(float top, float height)
 static void link_row(const char *label, Link *link, int pick, const char *tip)
 {
     ImGui::PushID(label);
+    ImGui::BeginGroup();
     ImGui::Text("%s:", label);
     ImGui::SameLine();
     if (link->valid()) {
@@ -636,6 +637,14 @@ static void link_row(const char *label, Link *link, int pick, const char *tip)
         editor_snapshot();
         *link = Link();
         editor_changed();
+    }
+    ImGui::EndGroup();
+    if (ImGui::IsItemHovered()) {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30.0f);
+        ImGui::TextUnformatted(tip);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
     }
     ImGui::PopID();
 }
@@ -1093,17 +1102,13 @@ static void help_window()
     ImGui::SetNextWindowSize(ImVec2(470, 0), ImGuiCond_Appearing);
     if (ImGui::Begin("Controls", &s_show_help, ImGuiWindowFlags_NoCollapse)) {
         ImGui::TextColored(ACCENT, "Camera");
-        ImGui::BulletText("Right drag: turn around the level");
+        ImGui::BulletText("Right button: turn around the level");
         ImGui::BulletText("Middle button or Shift + right button: move");
         ImGui::BulletText("Wheel: closer / farther;  W A S D, Q E: move;  F: look at the selection");
         ImGui::TextColored(ACCENT, "Building");
         ImGui::BulletText("1 Build, 2 Erase, 3 Paint, 4 Things, 5 Select");
         ImGui::BulletText("Build: click a side of a block, the new block snaps to it");
-        ImGui::BulletText("Ctrl + left-drag: erase blocks in Build, things in Things");
-        ImGui::BulletText("Click erases once; drag 8 pixels between further erases");
-        ImGui::BulletText("Erase drags continue through layers; each stroke is one Undo");
-        ImGui::BulletText("Hold Ctrl: preview the block or thing to delete");
-        ImGui::BulletText("Ctrl + left-click in Paint: restore one block to normal");
+        ImGui::BulletText("Ctrl + left button: delete a block or thing");
         ImGui::BulletText("G: the build plane (blocks in the air), PgUp / PgDn its height");
         ImGui::BulletText("R: turn the selected thing;  Delete: take the selection away");
         ImGui::BulletText("Ctrl+Z / Ctrl+Y: undo / redo;  Ctrl+S: save;  F5: play");
