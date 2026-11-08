@@ -628,14 +628,7 @@ static void put_thing(int cell, int side)
             }
         }
     }
-    Level::set_thing(&t, g_ed.thing_id);
-    const ThingInfo *info = thing_info(g_ed.thing_id);
-    if (info && (info->flags & (THING_KINDS | THING_COLOURED | THING_TIMED))) {
-        t.w[2] = (uint16_t) g_ed.thing_variant;
-    }
-    if (info && (info->flags & THING_ROTATES)) {
-        t.w[1] = (uint16_t) rotation_facing_camera(side);
-    }
+    t = g_ed.placement.make_thing(g_ed.thing_id, rotation_facing_camera(side));
     g_ed.sel_cell = cell;
     g_ed.sel_side = side;
     editor_changed();
@@ -653,6 +646,8 @@ static void act(int tool = g_ed.tool, int block_kind = g_ed.block_kind)
         change_once();
         int before = thing_total();
         lv.add_block(c, block_kind);
+        g_ed.placement.apply(lv.block(c));
+        lv.update_paths();
         say_dropped(before);
         g_ed.sel_cell = c;
         editor_changed();
@@ -677,6 +672,7 @@ static void act(int tool = g_ed.tool, int block_kind = g_ed.block_kind)
         Block keep = *b;
         lv.add_block(s_hover_cell, block_kind);
         Block *nb = lv.block(s_hover_cell);
+        g_ed.placement.apply(nb);
         if (keep.kind <= BLOCK_ACID && block_kind <= BLOCK_ACID) {
             for (int s = 0; s < 6; s++) {
                 nb->sides[s] = keep.sides[s];

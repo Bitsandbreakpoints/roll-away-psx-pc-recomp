@@ -533,17 +533,16 @@ static bool thing_button(const ThingInfo &info, int variant, float size)
                              : ImGui::IsItemHovered() ? IM_COL32(255, 255, 255, 40) : IM_COL32(255, 255, 255, 12),
                       5);
     draw_thing_icon(dl, ImVec2(p.x + size / 2, p.y + size / 2), size * 0.34f, info.id,
-                    (info.flags & THING_KINDS) ? variant : g_ed.thing_variant & 3, 255);
+                    (info.flags & THING_KINDS) ? variant : g_ed.placement.thing(info.id).w[2] & 3, 255);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", (info.flags & THING_KINDS) ? thing_variant_name(info.id, variant) : info.name);
     }
     if (clicked) {
         g_ed.thing_id = info.id;
         if (info.flags & THING_KINDS) {
-            g_ed.thing_variant = variant;
-        } else if (!(info.flags & (THING_COLOURED | THING_TIMED))) {
-            g_ed.thing_variant = 0;
+            g_ed.placement.thing(info.id).w[2] = (uint16_t) variant;
         }
+        g_ed.thing_variant = g_ed.placement.thing(info.id).w[2];
         g_ed.tool = TOOL_THING;
     }
     return clicked;
@@ -591,17 +590,71 @@ static void left_panel(float top, float height)
             }
         }
     }
-    const ThingInfo *chosen = thing_info(g_ed.thing_id);
-    if (chosen && (chosen->flags & (THING_COLOURED | THING_TIMED))) {
-        ImGui::Spacing();
-        ImGui::SetNextItemWidth(140);
-        if (chosen->flags & THING_COLOURED) {
-            ImGui::Combo("Colour##new", &g_ed.thing_variant, SIGNAL_NAMES, 4);
-        } else {
-            ImGui::SliderInt("Timing##new", &g_ed.thing_variant, 0, 3);
+    ImGui::End();
+}
+
+static void placement_panel()
+{
+    if (g_ed.tool != TOOL_BUILD && g_ed.tool != TOOL_PAINT && g_ed.tool != TOOL_THING) return;
+    if (!ImGui::CollapsingHeader("PLACEMENT", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    ImGui::PushID("placement");
+    ImGui::PushItemWidth(150);
+    if (g_ed.tool == TOOL_THING) {
+        const ThingInfo *info = thing_info(g_ed.thing_id);
+        if (info) {
+            Thing &t = g_ed.placement.thing(info->id);
+            ImGui::TextColored(ACCENT, "%s", info->name);
+            if (info->flags & THING_ROTATES) {
+                const char *facing[] = { "Camera", "Direction 1", "Direction 2", "Direction 3", "Direction 4" };
+                int rotation = t.w[1] <= 4 ? t.w[1] : 0;
+                if (ImGui::Combo("Facing", &rotation, facing, 5)) t.w[1] = (uint16_t) rotation;
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Camera faces the view. Directions 1-4 are relative to the face you place on.");
+            }
+            if (info->flags & THING_KINDS) {
+                const char *kinds[] = { thing_variant_name(info->id, 0), thing_variant_name(info->id, 1), thing_variant_name(info->id, 2) };
+                int variant = t.w[2] < 3 ? t.w[2] : 0;
+                if (ImGui::Combo("Kind", &variant, kinds, 3)) t.w[2] = (uint16_t) variant;
+            }
+            if (info->flags & THING_COLOURED) {
+                int colour = t.w[2] & 3;
+                if (ImGui::Combo("Colour", &colour, SIGNAL_NAMES, 4)) t.w[2] = (uint16_t) colour;
+            }
+            if (info->flags & THING_TIMED) {
+                int timing = t.w[2] & 3;
+                if (ImGui::SliderInt("Timing", &timing, 0, 3)) t.w[2] = (uint16_t) timing;
+            }
+            if (info->flags & THING_TOGGLES) {
+                bool on = t.w[3] == 1;
+                if (ImGui::Checkbox("On at the start", &on)) t.w[3] = on ? 1 : 2;
+            }
+            g_ed.thing_variant = t.w[2];
+        }
+    } else {
+        Block &b = g_ed.placement.block(g_ed.block_kind);
+        ImGui::TextColored(ACCENT, "%s", g_block_kinds[b.kind].name);
+        if (b.kind == BLOCK_MOVING || b.kind == BLOCK_LASER) {
+            int direction = b.prop[1] < 6 ? b.prop[1] : SIDE_RIGHT;
+            if (ImGui::Combo("Direction", &direction, DIRECTION_NAMES, 6)) b.prop[1] = (uint16_t) direction;
+            bool laser = b.kind == BLOCK_LASER;
+            ImGui::SliderInt(laser ? "Beam length" : "Distance", &b.length, laser ? 0 : 1, 16,
+                             laser && b.length == 0 ? "to a block" : "%d");
+            if (laser) {
+                int colour = b.prop[22] & 3;
+                if (ImGui::Combo("Colour", &colour, SIGNAL_NAMES, 4)) b.prop[22] = (uint16_t) colour;
+                bool on = b.prop[3] == 1;
+                if (ImGui::Checkbox("On at the start", &on)) b.prop[3] = on ? 1 : 0;
+            } else {
+                int speed = b.prop[17];
+                if (ImGui::SliderInt("Speed", &speed, 1, 4)) b.prop[17] = (uint16_t) speed;
+            }
+        } else if (b.kind == BLOCK_FLASHING) {
+            int timing = b.prop[2] & 3;
+            if (ImGui::SliderInt("Timing", &timing, 0, 3)) b.prop[2] = (uint16_t) timing;
         }
     }
-    ImGui::End();
+    ImGui::PopItemWidth();
+    ImGui::TextDisabled("Settings for new placements");
+    ImGui::PopID();
 }
 
 /* a reference's line in the properties: its target and buttons */
@@ -614,7 +667,13 @@ static void link_row(const char *label, Link *link, int pick, const char *tip)
     if (link->valid()) {
         int x, y, z;
         Level::position(link->cell, &x, &y, &z);
-        if (link->side == LINK_SELF) {
+        const Block *selected = g_ed.level.block(g_ed.sel_cell);
+        bool itself = link->cell == g_ed.sel_cell && selected &&
+                      (selected->kind == BLOCK_LASER ? link->side == LINK_SELF
+                                                    : link->side == g_ed.sel_side);
+        if (itself) {
+            ImGui::TextColored(ACCENT, "Itself");
+        } else if (link->side == LINK_SELF) {
             ImGui::TextColored(ACCENT, "laser %d,%d,%d", x, y, z);
         } else {
             const Block *b = g_ed.level.block(link->cell);
@@ -718,6 +777,7 @@ static void selection_panel()
         Block keep = *b;
         lv.add_block(g_ed.sel_cell, kind);
         b = lv.block(g_ed.sel_cell);
+        g_ed.placement.apply(b);
         if (keep.kind <= BLOCK_ACID && kind <= BLOCK_ACID) {
             for (int s = 0; s < 6; s++) {
                 b->sides[s] = keep.sides[s];
@@ -726,6 +786,7 @@ static void selection_panel()
         lv.update_paths();
         editor_changed();
     }
+    Block placement_before = *b;
     if (b->kind == BLOCK_MOVING || b->kind == BLOCK_LASER) {
         int dir = b->prop[1] < 6 ? b->prop[1] : 0;
         ImGui::SetNextItemWidth(150);
@@ -787,12 +848,23 @@ static void selection_panel()
             snapshot_frame_start();
         }
     }
+    g_ed.placement.remember_edits(placement_before, *b);
+    if (b->kind == BLOCK_MOVING || b->kind == BLOCK_LASER || b->kind == BLOCK_FLASHING) {
+        if (ImGui::Button("Use block settings for placement")) {
+            g_ed.placement.remember(*b);
+            g_ed.block_kind = b->kind;
+            g_ed.tool = TOOL_BUILD;
+            g_ed.link_pick = PICK_NONE;
+            editor_say("New %s blocks will use these settings (without links).", g_block_kinds[b->kind].name);
+        }
+    }
     if (b->kind > BLOCK_ACID) {
         return;
     }
     ImGui::Separator();
     int side = g_ed.sel_side;
     Thing &t = b->sides[side];
+    Thing thing_before = t;
     ImGui::Text("Side: %s", SIDE_NAMES[side]);
     if (!t.id()) {
         ImGui::TextDisabled(lv.side_open(g_ed.sel_cell, side) ? "Nothing on it." : "Covered by a block.");
@@ -803,6 +875,15 @@ static void selection_panel()
     if (!info) {
         ImGui::TextDisabled("(a thing the editor does not know: id %d)", t.id());
     } else {
+        if ((info->flags & (THING_ROTATES | THING_KINDS | THING_COLOURED | THING_TIMED | THING_TOGGLES)) &&
+            ImGui::Button("Use thing settings for placement")) {
+            g_ed.placement.remember(t);
+            g_ed.thing_id = t.id();
+            g_ed.thing_variant = g_ed.placement.thing(t.id()).w[2];
+            g_ed.tool = TOOL_THING;
+            g_ed.link_pick = PICK_NONE;
+            editor_say("New %s things will use these settings (without links).", info->name);
+        }
         if (info->flags & THING_ROTATES) {
             ImGui::Text("Facing:");
             for (int r = 1; r <= 4; r++) {
@@ -864,6 +945,8 @@ static void selection_panel()
                 editor_changed();
             }
         }
+        g_ed.placement.remember_edits(thing_before, t);
+        if (g_ed.thing_id == t.id()) g_ed.thing_variant = g_ed.placement.thing(t.id()).w[2];
         if ((t.id() == THING_EXIT || t.id() == THING_HIDDEN_EXIT)
             && next_level_row(t.id() == THING_HIDDEN_EXIT)) {
             return;
@@ -971,6 +1054,8 @@ static void right_panel(float top, float height, float width, const std::vector<
                                      | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
     ImGui::TextColored(ACCENT, "LEVEL");
     level_panel();
+    ImGui::Spacing();
+    placement_panel();
     ImGui::Spacing();
     ImGui::TextColored(ACCENT, "SELECTED");
     selection_panel();
@@ -1222,6 +1307,7 @@ static void keys()
             if (info && (info->flags & THING_ROTATES)) {
                 editor_snapshot();
                 t.w[1] = (uint16_t) (t.w[1] % 4 + 1);
+                g_ed.placement.remember(t);
                 editor_changed();
             }
         }

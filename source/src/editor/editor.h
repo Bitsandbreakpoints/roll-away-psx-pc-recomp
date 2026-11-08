@@ -10,6 +10,7 @@
 
 #include "imgui.h"
 #include "editor/level_model.h"
+#include "editor/placement_settings.h"
 #include "editor/renderer.h"
 
 struct ID3D11Device;
@@ -43,6 +44,7 @@ struct Editor {
     int block_kind = BLOCK_NORMAL;
     int thing_id = THING_COIN;
     int thing_variant = 0;
+    PlacementSettings placement;
 
     int sel_cell = -1, sel_side = SIDE_TOP;
     int link_pick = PICK_NONE;
