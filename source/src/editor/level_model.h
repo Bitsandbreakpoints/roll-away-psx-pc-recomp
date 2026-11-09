@@ -126,7 +126,7 @@ struct Link {
 struct Thing {
     uint16_t w[16];                     /* the game's words (w[0] the id) */
     Link power;                         /* w[5]: the next in the power chain */
-    Link target;                        /* w[6]: a transporter's destination, a button's 2nd */
+    Link target;                        /* w[6]: transporter destination or button's Start chain */
     int id() const { return w[0]; }
 };
 

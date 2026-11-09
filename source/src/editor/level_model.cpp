@@ -436,6 +436,46 @@ std::vector<Level::Problem> Level::check() const
             }
         }
     }
+    /* Start chain and transporter destinations are entry/teleport links,
+     * not continuation edges. Only Chain next can make switching loop. */
+    std::map<int, int> chain;
+    auto chain_node = [](const Link &link) {
+        return link.valid() && link.side >= 0 && link.side <= LINK_SELF
+               ? link.cell * 7 + link.side : -1;
+    };
+    for (const auto &kv : m_blocks) {
+        const Block &b = kv.second;
+        if (b.kind == BLOCK_LASER) {
+            chain[kv.first * 7 + LINK_SELF] = chain_node(b.laser_power);
+        } else if (b.kind <= BLOCK_ACID) {
+            for (int side = 0; side < 6; side++) {
+                const Thing &t = b.sides[side];
+                if (t.id() == THING_BUTTON || t.id() == THING_TRANSPORTER) {
+                    chain[kv.first * 7 + side] = chain_node(t.power);
+                }
+            }
+        }
+    }
+    std::map<int, int> visited;          /* 1: this path, 2: already checked */
+    for (const auto &edge : chain) {
+        int node = edge.first;
+        std::vector<int> path;
+        while (chain.count(node) && visited[node] == 0) {
+            visited[node] = 1;
+            path.push_back(node);
+            node = chain.at(node);
+        }
+        if (chain.count(node) && visited[node] == 1) {
+            int cell = node / 7, x, y, z;
+            position(cell, &x, &y, &z);
+            out.push_back({ true, "Circular switch chain at (" + std::to_string(x) + ", " +
+                           std::to_string(y) + ", " + std::to_string(z) +
+                           "): clear a Chain next link so the chain can stop.", cell });
+        }
+        for (int checked : path) {
+            visited[checked] = 2;
+        }
+    }
     return out;
 }
 

@@ -23,6 +23,7 @@
 Editor g_ed;
 
 static HWND s_hwnd;
+static HANDLE s_play_process;
 static bool s_open_disc_dialog, s_show_help, s_show_problems_on_play;
 static int s_disc_world;
 static std::vector<DiscLevel> s_disc_levels;
@@ -31,10 +32,10 @@ static std::string s_disc_error;
 
 static const char *const TOOL_NAMES[TOOL_COUNT] = { "Build", "Erase", "Paint", "Things", "Select" };
 static const char *const TOOL_HINTS[TOOL_COUNT] = {
-    "Click a side of a block: a new block snaps on there (one click, one block).",
-    "Click blocks to take them away.",
-    "Click blocks to make them the chosen kind.",
-    "Click an open side of a block to put the chosen thing on it.",
+    "Click a side of a block to build. Ctrl + left-drag erases blocks, including newly exposed layers.",
+    "Click erases one block. Move at least 8 pixels between further erases while dragging.",
+    "Click blocks to make them the chosen kind. Ctrl + left-click restores one block to normal.",
+    "Click an open side to place a thing. Hold Ctrl to preview; Ctrl + left-drag removes things, keeping their blocks.",
     "Click a block's side to see and change it on the right."
 };
 static const char *const SIDE_NAMES[6] = { "top", "right (+X)", "front (+Z)", "back (-Z)", "left (-X)", "bottom" };
@@ -116,6 +117,7 @@ static void undo()
     if (g_ed.undo.empty()) {
         return;
     }
+    view_cancel_stroke();
     g_ed.redo.push_back(g_ed.level);
     int theme = g_ed.level.settings.theme;
     g_ed.level = g_ed.undo.back();
@@ -131,6 +133,7 @@ static void redo()
     if (g_ed.redo.empty()) {
         return;
     }
+    view_cancel_stroke();
     g_ed.undo.push_back(g_ed.level);
     int theme = g_ed.level.settings.theme;
     g_ed.level = g_ed.redo.back();
@@ -395,6 +398,41 @@ static void choose_disc()
 
 /* ---- playing ---- */
 
+static BOOL CALLBACK close_play_window(HWND hwnd, LPARAM process_id)
+{
+    DWORD owner;
+    GetWindowThreadProcessId(hwnd, &owner);
+    if (owner == (DWORD) process_id) {
+        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+    }
+    return TRUE;
+}
+
+static bool stop_play()
+{
+    if (!s_play_process) {
+        return true;
+    }
+    DWORD result = WaitForSingleObject(s_play_process, 0);
+    if (result == WAIT_TIMEOUT) {
+        EnumWindows(close_play_window, (LPARAM) GetProcessId(s_play_process));
+        result = WaitForSingleObject(s_play_process, 2000);
+        if (result == WAIT_TIMEOUT) {
+            /* A stalled game must not leave another preview running. */
+            TerminateProcess(s_play_process, 0);
+            result = WaitForSingleObject(s_play_process, 2000);
+        }
+    }
+    if (result != WAIT_OBJECT_0) {
+        MessageBoxW(s_hwnd, L"The previous game could not be closed. Close it and try Play again.",
+                    L"Roll Away level editor", MB_ICONERROR);
+        return false;
+    }
+    CloseHandle(s_play_process);
+    s_play_process = NULL;
+    return true;
+}
+
 static void play()
 {
     std::vector<Level::Problem> problems = g_ed.level.check();
@@ -425,12 +463,15 @@ static void play()
     PROCESS_INFORMATION pi = {};
     std::vector<wchar_t> line(command.begin(), command.end());
     line.push_back(0);
+    if (!stop_play()) {
+        return;
+    }
     if (!CreateProcessW(exe.c_str(), line.data(), NULL, NULL, FALSE, 0, NULL, folder.c_str(), &si, &pi)) {
         MessageBoxW(s_hwnd, L"The game could not be started.", L"Roll Away level editor", MB_ICONERROR);
         return;
     }
     CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
+    s_play_process = pi.hProcess;
     editor_say("The game starts with the level (Esc in the game comes back).");
 }
 
@@ -494,17 +535,16 @@ static bool thing_button(const ThingInfo &info, int variant, float size)
                              : ImGui::IsItemHovered() ? IM_COL32(255, 255, 255, 40) : IM_COL32(255, 255, 255, 12),
                       5);
     draw_thing_icon(dl, ImVec2(p.x + size / 2, p.y + size / 2), size * 0.34f, info.id,
-                    (info.flags & THING_KINDS) ? variant : g_ed.thing_variant & 3, 255);
+                    (info.flags & THING_KINDS) ? variant : g_ed.placement.thing(info.id).w[2] & 3, 255);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", (info.flags & THING_KINDS) ? thing_variant_name(info.id, variant) : info.name);
     }
     if (clicked) {
         g_ed.thing_id = info.id;
         if (info.flags & THING_KINDS) {
-            g_ed.thing_variant = variant;
-        } else if (!(info.flags & (THING_COLOURED | THING_TIMED))) {
-            g_ed.thing_variant = 0;
+            g_ed.placement.thing(info.id).w[2] = (uint16_t) variant;
         }
+        g_ed.thing_variant = g_ed.placement.thing(info.id).w[2];
         g_ed.tool = TOOL_THING;
     }
     return clicked;
@@ -552,29 +592,90 @@ static void left_panel(float top, float height)
             }
         }
     }
-    const ThingInfo *chosen = thing_info(g_ed.thing_id);
-    if (chosen && (chosen->flags & (THING_COLOURED | THING_TIMED))) {
-        ImGui::Spacing();
-        ImGui::SetNextItemWidth(140);
-        if (chosen->flags & THING_COLOURED) {
-            ImGui::Combo("Colour##new", &g_ed.thing_variant, SIGNAL_NAMES, 4);
-        } else {
-            ImGui::SliderInt("Timing##new", &g_ed.thing_variant, 0, 3);
+    ImGui::End();
+}
+
+static void placement_panel()
+{
+    if (g_ed.tool != TOOL_BUILD && g_ed.tool != TOOL_PAINT && g_ed.tool != TOOL_THING) return;
+    if (!ImGui::CollapsingHeader("PLACEMENT", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    ImGui::PushID("placement");
+    ImGui::PushItemWidth(150);
+    if (g_ed.tool == TOOL_THING) {
+        const ThingInfo *info = thing_info(g_ed.thing_id);
+        if (info) {
+            Thing &t = g_ed.placement.thing(info->id);
+            ImGui::TextColored(ACCENT, "%s", info->name);
+            if (info->flags & THING_ROTATES) {
+                const char *facing[] = { "Camera", "Direction 1", "Direction 2", "Direction 3", "Direction 4" };
+                int rotation = t.w[1] <= 4 ? t.w[1] : 0;
+                if (ImGui::Combo("Facing", &rotation, facing, 5)) t.w[1] = (uint16_t) rotation;
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Camera faces the view. Directions 1-4 are relative to the face you place on.");
+            }
+            if (info->flags & THING_KINDS) {
+                const char *kinds[] = { thing_variant_name(info->id, 0), thing_variant_name(info->id, 1), thing_variant_name(info->id, 2) };
+                int variant = t.w[2] < 3 ? t.w[2] : 0;
+                if (ImGui::Combo("Kind", &variant, kinds, 3)) t.w[2] = (uint16_t) variant;
+            }
+            if (info->flags & THING_COLOURED) {
+                int colour = t.w[2] & 3;
+                if (ImGui::Combo("Colour", &colour, SIGNAL_NAMES, 4)) t.w[2] = (uint16_t) colour;
+            }
+            if (info->flags & THING_TIMED) {
+                int timing = t.w[2] & 3;
+                if (ImGui::SliderInt("Timing", &timing, 0, 3)) t.w[2] = (uint16_t) timing;
+            }
+            if (info->flags & THING_TOGGLES) {
+                bool on = t.w[3] == 1;
+                if (ImGui::Checkbox("On at the start", &on)) t.w[3] = on ? 1 : 2;
+            }
+            g_ed.thing_variant = t.w[2];
+        }
+    } else {
+        Block &b = g_ed.placement.block(g_ed.block_kind);
+        ImGui::TextColored(ACCENT, "%s", g_block_kinds[b.kind].name);
+        if (b.kind == BLOCK_MOVING || b.kind == BLOCK_LASER) {
+            int direction = b.prop[1] < 6 ? b.prop[1] : SIDE_RIGHT;
+            if (ImGui::Combo("Direction", &direction, DIRECTION_NAMES, 6)) b.prop[1] = (uint16_t) direction;
+            bool laser = b.kind == BLOCK_LASER;
+            ImGui::SliderInt(laser ? "Beam length" : "Distance", &b.length, laser ? 0 : 1, 16,
+                             laser && b.length == 0 ? "to a block" : "%d");
+            if (laser) {
+                int colour = b.prop[22] & 3;
+                if (ImGui::Combo("Colour", &colour, SIGNAL_NAMES, 4)) b.prop[22] = (uint16_t) colour;
+                bool on = b.prop[3] == 1;
+                if (ImGui::Checkbox("On at the start", &on)) b.prop[3] = on ? 1 : 0;
+            } else {
+                int speed = b.prop[17];
+                if (ImGui::SliderInt("Speed", &speed, 1, 4)) b.prop[17] = (uint16_t) speed;
+            }
+        } else if (b.kind == BLOCK_FLASHING) {
+            int timing = b.prop[2] & 3;
+            if (ImGui::SliderInt("Timing", &timing, 0, 3)) b.prop[2] = (uint16_t) timing;
         }
     }
-    ImGui::End();
+    ImGui::PopItemWidth();
+    ImGui::TextDisabled("Settings for new placements");
+    ImGui::PopID();
 }
 
 /* a reference's line in the properties: its target and buttons */
 static void link_row(const char *label, Link *link, int pick, const char *tip)
 {
     ImGui::PushID(label);
+    ImGui::BeginGroup();
     ImGui::Text("%s:", label);
     ImGui::SameLine();
     if (link->valid()) {
         int x, y, z;
         Level::position(link->cell, &x, &y, &z);
-        if (link->side == LINK_SELF) {
+        const Block *selected = g_ed.level.block(g_ed.sel_cell);
+        bool itself = link->cell == g_ed.sel_cell && selected &&
+                      (selected->kind == BLOCK_LASER ? link->side == LINK_SELF
+                                                    : link->side == g_ed.sel_side);
+        if (itself) {
+            ImGui::TextColored(ACCENT, "Itself");
+        } else if (link->side == LINK_SELF) {
             ImGui::TextColored(ACCENT, "laser %d,%d,%d", x, y, z);
         } else {
             const Block *b = g_ed.level.block(link->cell);
@@ -597,6 +698,14 @@ static void link_row(const char *label, Link *link, int pick, const char *tip)
         editor_snapshot();
         *link = Link();
         editor_changed();
+    }
+    ImGui::EndGroup();
+    if (ImGui::IsItemHovered()) {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 30.0f);
+        ImGui::TextUnformatted(tip);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
     }
     ImGui::PopID();
 }
@@ -670,6 +779,7 @@ static void selection_panel()
         Block keep = *b;
         lv.add_block(g_ed.sel_cell, kind);
         b = lv.block(g_ed.sel_cell);
+        g_ed.placement.apply(b);
         if (keep.kind <= BLOCK_ACID && kind <= BLOCK_ACID) {
             for (int s = 0; s < 6; s++) {
                 b->sides[s] = keep.sides[s];
@@ -678,6 +788,7 @@ static void selection_panel()
         lv.update_paths();
         editor_changed();
     }
+    Block placement_before = *b;
     if (b->kind == BLOCK_MOVING || b->kind == BLOCK_LASER) {
         int dir = b->prop[1] < 6 ? b->prop[1] : 0;
         ImGui::SetNextItemWidth(150);
@@ -724,8 +835,8 @@ static void selection_panel()
                 b->prop[3] = on ? 1 : 2;
                 editor_changed();
             }
-            link_row("Power", &b->laser_power, PICK_LASER_POWER,
-                     "Click the next transporter, button or laser of this power chain.");
+            link_row("Chain next", &b->laser_power, PICK_LASER_POWER,
+                     "Next object toggled after this laser. Leave empty to end the chain.");
         }
     }
     if (b->kind == BLOCK_FLASHING) {
@@ -739,12 +850,23 @@ static void selection_panel()
             snapshot_frame_start();
         }
     }
+    g_ed.placement.remember_edits(placement_before, *b);
+    if (b->kind == BLOCK_MOVING || b->kind == BLOCK_LASER || b->kind == BLOCK_FLASHING) {
+        if (ImGui::Button("Use block settings for placement")) {
+            g_ed.placement.remember(*b);
+            g_ed.block_kind = b->kind;
+            g_ed.tool = TOOL_BUILD;
+            g_ed.link_pick = PICK_NONE;
+            editor_say("New %s blocks will use these settings (without links).", g_block_kinds[b->kind].name);
+        }
+    }
     if (b->kind > BLOCK_ACID) {
         return;
     }
     ImGui::Separator();
     int side = g_ed.sel_side;
     Thing &t = b->sides[side];
+    Thing thing_before = t;
     ImGui::Text("Side: %s", SIDE_NAMES[side]);
     if (!t.id()) {
         ImGui::TextDisabled(lv.side_open(g_ed.sel_cell, side) ? "Nothing on it." : "Covered by a block.");
@@ -755,6 +877,15 @@ static void selection_panel()
     if (!info) {
         ImGui::TextDisabled("(a thing the editor does not know: id %d)", t.id());
     } else {
+        if ((info->flags & (THING_ROTATES | THING_KINDS | THING_COLOURED | THING_TIMED | THING_TOGGLES)) &&
+            ImGui::Button("Use thing settings for placement")) {
+            g_ed.placement.remember(t);
+            g_ed.thing_id = t.id();
+            g_ed.thing_variant = g_ed.placement.thing(t.id()).w[2];
+            g_ed.tool = TOOL_THING;
+            g_ed.link_pick = PICK_NONE;
+            editor_say("New %s things will use these settings (without links).", info->name);
+        }
         if (info->flags & THING_ROTATES) {
             ImGui::Text("Facing:");
             for (int r = 1; r <= 4; r++) {
@@ -816,16 +947,20 @@ static void selection_panel()
                 editor_changed();
             }
         }
+        g_ed.placement.remember_edits(thing_before, t);
+        if (g_ed.thing_id == t.id()) g_ed.thing_variant = g_ed.placement.thing(t.id()).w[2];
         if ((t.id() == THING_EXIT || t.id() == THING_HIDDEN_EXIT)
             && next_level_row(t.id() == THING_HIDDEN_EXIT)) {
             return;
         }
         if (t.id() == THING_TRANSPORTER) {
             link_row("Destination", &t.target, PICK_TARGET, "Click the transporter it takes the ball to.");
-            link_row("Power", &t.power, PICK_POWER, "Click the next transporter, button or laser of its power chain.");
+            link_row("Chain next", &t.power, PICK_POWER, "Next object toggled after this transporter. Leave empty to end the chain.");
         } else if (t.id() == THING_BUTTON) {
-            link_row("Powers", &t.power, PICK_POWER, "Click what the button switches (a transporter, button or laser).");
-            link_row("Powers 2", &t.target, PICK_TARGET, "Click a second thing the button switches.");
+            link_row("Start chain", &t.target, PICK_TARGET,
+                     "Pressing this button starts switching here. Select this button itself to include its light in the chain.");
+            link_row("Chain next", &t.power, PICK_POWER,
+                     "Next object toggled after this button is toggled by a chain. Leave empty to end the chain.");
         }
     }
     if (ImGui::Button("Take it away")) {
@@ -921,6 +1056,8 @@ static void right_panel(float top, float height, float width, const std::vector<
                                      | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus);
     ImGui::TextColored(ACCENT, "LEVEL");
     level_panel();
+    ImGui::Spacing();
+    placement_panel();
     ImGui::Spacing();
     ImGui::TextColored(ACCENT, "SELECTED");
     selection_panel();
@@ -1058,6 +1195,7 @@ static void help_window()
         ImGui::TextColored(ACCENT, "Building");
         ImGui::BulletText("1 Build, 2 Erase, 3 Paint, 4 Things, 5 Select");
         ImGui::BulletText("Build: click a side of a block, the new block snaps to it");
+        ImGui::BulletText("Ctrl + left button: delete a block or thing");
         ImGui::BulletText("G: the build plane (blocks in the air), PgUp / PgDn its height");
         ImGui::BulletText("R: turn the selected thing;  Delete: take the selection away");
         ImGui::BulletText("Ctrl+Z / Ctrl+Y: undo / redo;  Ctrl+S: save;  F5: play");
@@ -1171,6 +1309,7 @@ static void keys()
             if (info && (info->flags & THING_ROTATES)) {
                 editor_snapshot();
                 t.w[1] = (uint16_t) (t.w[1] % 4 + 1);
+                g_ed.placement.remember(t);
                 editor_changed();
             }
         }
@@ -1199,6 +1338,10 @@ bool editor_init(ID3D11Device *device, ID3D11DeviceContext *context, void *hwnd)
 
 void editor_shutdown()
 {
+    if (s_play_process) {
+        CloseHandle(s_play_process);
+        s_play_process = NULL;
+    }
     renderer_shutdown();
 }
 

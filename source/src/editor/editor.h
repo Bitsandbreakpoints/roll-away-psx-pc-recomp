@@ -10,6 +10,7 @@
 
 #include "imgui.h"
 #include "editor/level_model.h"
+#include "editor/placement_settings.h"
 #include "editor/renderer.h"
 
 struct ID3D11Device;
@@ -43,6 +44,7 @@ struct Editor {
     int block_kind = BLOCK_NORMAL;
     int thing_id = THING_COIN;
     int thing_variant = 0;
+    PlacementSettings placement;
 
     int sel_cell = -1, sel_side = SIDE_TOP;
     int link_pick = PICK_NONE;
@@ -81,6 +83,7 @@ void editor_world_changed();
 /* editor_view.cpp */
 void view_frame(int width, int height);
 void view_focus();
+void view_cancel_stroke();             /* level replaced: require a fresh mouse press */
 /* the direction a thing faces: rotation 1..4 on `side`, as a vector */
 Vec3 thing_direction(int side, int rotation);
 /* the rotation (1..4) on `side` nearest the camera's forward direction */

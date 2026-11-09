@@ -47,7 +47,8 @@ def sha256(path):
 
 def fetch(tool):
     dest = os.path.join(HERE, tool['dest'])
-    if os.path.isdir(dest):
+    complete = os.path.join(dest, '.setup-complete')
+    if os.path.isfile(complete):
         print(f'{tool["name"]}: already in {dest}')
         return
     os.makedirs(DOWNLOADS, exist_ok=True)
@@ -65,10 +66,16 @@ def fetch(tool):
         z.extractall(tmp)
     if tool['strip_top_dir']:
         (top,) = os.listdir(tmp)
-        os.rename(os.path.join(tmp, top), dest)
-        os.rmdir(tmp)
+        extracted = os.path.join(tmp, top)
     else:
-        os.rename(tmp, dest)
+        extracted = tmp
+    # Windows can deny renaming a freshly extracted compiler directory while
+    # files are being scanned. Copy into place instead; incomplete installs
+    # are retried rather than mistaken for a finished toolchain.
+    shutil.copytree(extracted, dest, dirs_exist_ok=True)
+    with open(complete, 'w', encoding='utf-8') as f:
+        f.write(tool['sha256'] + '\n')
+    shutil.rmtree(tmp, ignore_errors=True)
 
 
 def main():

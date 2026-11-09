@@ -23,7 +23,19 @@ static const ImU32 SIGNAL_COLOURS[4] = {
 static int s_hover_cell = -1, s_hover_side = 0;     /* the block under the mouse */
 static int s_hover_new = -1;                        /* where the build tool would put one */
 static bool s_dragging, s_drag_changed;
+static bool s_erase_stroke;
+static ImVec2 s_erase_position;
+static int s_stroke_tool, s_stroke_kind, s_stroke_thing, s_stroke_variant;
+static bool s_stroke_ctrl;
 static int s_last_action_cell = -1, s_last_action_side = -1;
+
+void view_cancel_stroke()
+{
+    s_dragging = false;
+    s_erase_stroke = false;
+    s_drag_changed = false;
+    s_last_action_cell = s_last_action_side = -1;
+}
 
 static Vec3 cell_lo(int c)
 {
@@ -586,6 +598,15 @@ static void change_once()
     }
 }
 
+static Thing *hovered_thing()
+{
+    Block *b = s_hover_cell >= 0 ? g_ed.level.block(s_hover_cell) : NULL;
+    if (!b || b->kind > BLOCK_ACID || b->sides[s_hover_side].id() == THING_NONE) {
+        return NULL;
+    }
+    return &b->sides[s_hover_side];
+}
+
 static void put_thing(int cell, int side)
 {
     Level &lv = g_ed.level;
@@ -615,23 +636,16 @@ static void put_thing(int cell, int side)
             }
         }
     }
-    Level::set_thing(&t, g_ed.thing_id);
-    const ThingInfo *info = thing_info(g_ed.thing_id);
-    if (info && (info->flags & (THING_KINDS | THING_COLOURED | THING_TIMED))) {
-        t.w[2] = (uint16_t) g_ed.thing_variant;
-    }
-    if (info && (info->flags & THING_ROTATES)) {
-        t.w[1] = (uint16_t) rotation_facing_camera(side);
-    }
+    t = g_ed.placement.make_thing(g_ed.thing_id, rotation_facing_camera(side));
     g_ed.sel_cell = cell;
     g_ed.sel_side = side;
     editor_changed();
 }
 
-static void act()
+static void act(int tool = g_ed.tool, int block_kind = g_ed.block_kind)
 {
     Level &lv = g_ed.level;
-    switch (g_ed.tool) {
+    switch (tool) {
     case TOOL_BUILD: {
         int c = s_hover_new;
         if (c < 0 || lv.block(c)) {
@@ -639,14 +653,16 @@ static void act()
         }
         change_once();
         int before = thing_total();
-        lv.add_block(c, g_ed.block_kind);
+        lv.add_block(c, block_kind);
+        g_ed.placement.apply(lv.block(c));
+        lv.update_paths();
         say_dropped(before);
         g_ed.sel_cell = c;
         editor_changed();
         break;
     }
     case TOOL_ERASE:
-        if (s_hover_cell >= 0) {
+        if (s_hover_cell >= 0 && lv.block(s_hover_cell)) {
             change_once();
             lv.remove_block(s_hover_cell);
             if (g_ed.sel_cell == s_hover_cell) {
@@ -657,14 +673,15 @@ static void act()
         break;
     case TOOL_PAINT: {
         Block *b = s_hover_cell >= 0 ? lv.block(s_hover_cell) : NULL;
-        if (!b || b->kind == g_ed.block_kind) {
+        if (!b || b->kind == block_kind) {
             return;
         }
         change_once();
         Block keep = *b;
-        lv.add_block(s_hover_cell, g_ed.block_kind);
+        lv.add_block(s_hover_cell, block_kind);
         Block *nb = lv.block(s_hover_cell);
-        if (keep.kind <= BLOCK_ACID && g_ed.block_kind <= BLOCK_ACID) {
+        g_ed.placement.apply(nb);
+        if (keep.kind <= BLOCK_ACID && block_kind <= BLOCK_ACID) {
             for (int s = 0; s < 6; s++) {
                 nb->sides[s] = keep.sides[s];
             }
@@ -683,6 +700,30 @@ static void act()
         g_ed.sel_cell = s_hover_cell;
         g_ed.sel_side = s_hover_side;
         break;
+    }
+}
+
+static bool erase_drag_ready(ImVec2 position, float threshold)
+{
+    float dx = position.x - s_erase_position.x;
+    float dy = position.y - s_erase_position.y;
+    if (dx * dx + dy * dy < threshold * threshold) {
+        return false;
+    }
+    s_erase_position = position;
+    return true;
+}
+
+static void erase_stroke_target()
+{
+    if (s_stroke_tool == TOOL_THING) {
+        if (Thing *thing = hovered_thing()) {
+            change_once();
+            Level::set_thing(thing, THING_NONE);
+            editor_changed();
+        }
+    } else {
+        act(TOOL_ERASE);
     }
 }
 
@@ -708,8 +749,14 @@ static void finish_pick()
         editor_say("Choose a transporter, a button or a laser block.");
         return;
     }
-    if (l.cell == g_ed.sel_cell && l.side == g_ed.sel_side && g_ed.link_pick != PICK_LASER_POWER) {
-        editor_say("A thing cannot refer to itself.");
+    bool same_target = l.cell == g_ed.sel_cell &&
+                       (l.side == g_ed.sel_side || g_ed.link_pick == PICK_LASER_POWER);
+    bool button_start = g_ed.link_pick == PICK_TARGET && from->kind <= BLOCK_ACID &&
+                        from->sides[g_ed.sel_side].id() == THING_BUTTON;
+    if (same_target && !button_start) {
+        editor_say(g_ed.link_pick == PICK_POWER || g_ed.link_pick == PICK_LASER_POWER
+                   ? "Chain next cannot point to itself: the switch chain would never end."
+                   : "A transporter cannot have itself as its destination.");
         return;
     }
     editor_snapshot();
@@ -806,6 +853,13 @@ void view_frame(int width, int height)
     renderer_begin(cam, width, height);
 
     /* what is under the mouse */
+    if (s_dragging && (g_ed.tool != s_stroke_tool || g_ed.block_kind != s_stroke_kind ||
+        g_ed.thing_id != s_stroke_thing || g_ed.thing_variant != s_stroke_variant ||
+        io.KeyCtrl != s_stroke_ctrl || io.KeyAlt || g_ed.link_pick != PICK_NONE ||
+        ImGui::IsMouseDown(ImGuiMouseButton_Right) || ImGui::IsMouseDown(ImGuiMouseButton_Middle))) {
+        s_dragging = false;
+        s_erase_stroke = false;
+    }
     s_hover_cell = -1;
     s_hover_new = -1;
     if (in_view || s_dragging) {
@@ -824,8 +878,26 @@ void view_frame(int width, int height)
 
     /* the left button */
     if (in_view && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !io.KeyAlt) {
+        s_stroke_tool = g_ed.tool;
+        s_stroke_kind = g_ed.block_kind;
+        s_stroke_thing = g_ed.thing_id;
+        s_stroke_variant = g_ed.thing_variant;
+        s_stroke_ctrl = io.KeyCtrl;
+        s_erase_stroke = false;
         if (g_ed.link_pick != PICK_NONE) {
             finish_pick();
+        } else if (g_ed.tool == TOOL_ERASE || (io.KeyCtrl &&
+                   (g_ed.tool == TOOL_BUILD || g_ed.tool == TOOL_THING))) {
+            s_dragging = true;
+            s_drag_changed = false;
+            s_erase_stroke = true;
+            s_erase_position = io.MousePos;
+            erase_stroke_target();
+        } else if (io.KeyCtrl && g_ed.tool == TOOL_PAINT) {
+            /* A shortcut edits once per click, never as a held drag. */
+            s_dragging = false;
+            s_drag_changed = false;
+            act(TOOL_PAINT, BLOCK_NORMAL);
         } else {
             s_dragging = true;
             s_drag_changed = false;
@@ -834,9 +906,15 @@ void view_frame(int width, int height)
             s_last_action_side = s_hover_side;
         }
     } else if (s_dragging && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        /* Require deliberate movement after every erase, including the click.
+         * A held button or small hand jitter must not tunnel through layers. */
+        if (s_erase_stroke && in_view &&
+            erase_drag_ready(io.MousePos, fmaxf(8.0f, io.MouseDragThreshold))) {
+            erase_stroke_target();
+        }
         /* (blocks are built one click at a time, never by holding the button) */
         if (s_hover_cell != s_last_action_cell || s_hover_side != s_last_action_side) {
-            if (g_ed.tool != TOOL_SELECT && g_ed.tool != TOOL_BUILD) {
+            if (in_view && !s_erase_stroke && g_ed.tool != TOOL_SELECT && g_ed.tool != TOOL_BUILD && g_ed.tool != TOOL_ERASE) {
                 act();
             }
             s_last_action_cell = s_hover_cell;
@@ -844,6 +922,7 @@ void view_frame(int width, int height)
         }
     } else if (s_dragging) {
         s_dragging = false;
+        s_erase_stroke = false;
     }
 
     ImDrawList *dl = ImGui::GetBackgroundDrawList();
@@ -856,7 +935,27 @@ void view_frame(int width, int height)
             renderer_box_lines(cell_lo(s_hover_cell) - v3(0.02f, 0.02f, 0.02f),
                                cell_lo(s_hover_cell) + v3(1.02f, 1.02f, 1.02f), 0xFFFFE050u);
         }
-    } else if (g_ed.tool == TOOL_BUILD && s_hover_new >= 0 && !lv.block(s_hover_new)) {
+    } else if (io.KeyCtrl && g_ed.tool == TOOL_THING) {
+        if (hovered_thing()) {
+            int x, y, z;
+            Level::position(s_hover_cell, &x, &y, &z);
+            renderer_decal(x, y, z, s_hover_side, 0.05f, 0x803246FFu);
+            float sx, sy, depth;
+            if (renderer_project(side_centre(s_hover_cell, s_hover_side, 0.3f), &sx, &sy, &depth)) {
+                float r = height * 0.045f * 10.0f / (depth + 4.0f);
+                r = r < 6 ? 6 : r > 30 ? 30 : r;
+                ImU32 red = IM_COL32(255, 70, 50, 255);
+                dl->AddCircle(ImVec2(sx, sy), r + 3, red, 0, 2.5f);
+                dl->AddLine(ImVec2(sx - r, sy - r), ImVec2(sx + r, sy + r), red, 2.5f);
+                dl->AddLine(ImVec2(sx - r, sy + r), ImVec2(sx + r, sy - r), red, 2.5f);
+            }
+        }
+    } else if (io.KeyCtrl && g_ed.tool == TOOL_BUILD && s_hover_cell >= 0) {
+        Vec3 lo = cell_lo(s_hover_cell);
+        renderer_cube(lo - v3(0.01f, 0.01f, 0.01f), lo + v3(1.01f, 1.01f, 1.01f), 0x403246FFu, false);
+        renderer_box_lines(cell_lo(s_hover_cell) - v3(0.02f, 0.02f, 0.02f),
+                           cell_lo(s_hover_cell) + v3(1.02f, 1.02f, 1.02f), 0xFF3246FFu);
+    } else if (g_ed.tool == TOOL_BUILD && !io.KeyCtrl && s_hover_new >= 0 && !lv.block(s_hover_new)) {
         Vec3 lo = cell_lo(s_hover_new);
         uint32_t tint = (g_block_kinds[g_ed.block_kind].colour & 0x00FFFFFF) | 0x60000000u;
         renderer_cube(lo + v3(0.02f, 0.02f, 0.02f), lo + v3(0.98f, 0.98f, 0.98f), tint, true);
